@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Display Controller 传输协议 — 完整信号时序与逐行扫描动画</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#080c1a;color:#e0e6ed;overflow-x:hidden}
+
+.header{text-align:center;padding:24px 20px 8px}
+.header h1{font-size:24px;color:#64ffda;letter-spacing:2px}
+.header p{font-size:13px;color:#8892b0;margin-top:6px}
+
+.tabs{display:flex;justify-content:center;gap:10px;padding:14px;flex-wrap:wrap}
+.tab-btn{padding:8px 20px;border:2px solid #233554;border-radius:8px;background:#112240;color:#8892b0;cursor:pointer;font-size:13px;transition:all .3s}
+.tab-btn:hover{border-color:#64ffda;color:#64ffda}
+.tab-btn.active{background:#1d3461;border-color:#64ffda;color:#64ffda}
+
+.scene-wrap{max-width:1200px;margin:0 auto;padding:10px 20px}
+.scene{display:none}.scene.active{display:block}
+
+.info-box{background:#112240;border:1px solid #233554;border-radius:10px;padding:14px 18px;margin-bottom:12px}
+.info-box h3{color:#64ffda;margin-bottom:6px;font-size:16px}
+.info-box p{color:#a8b2d1;font-size:13px;line-height:1.7}
+.hl{color:#f7c948;font-weight:bold}.kw{color:#ff6b6b;font-weight:bold}
+
+canvas{display:block;background:#0a0f24;border:1px solid #1a2744;border-radius:10px;width:100%}
+
+.ctrl-row{display:flex;justify-content:center;gap:12px;padding:10px}
+.ctrl-btn{padding:7px 18px;border:1px solid #64ffda;border-radius:6px;background:transparent;color:#64ffda;cursor:pointer;font-size:13px;transition:all .3s}
+.ctrl-btn:hover{background:#64ffda22}
+.ctrl-btn.on{background:#64ffda;color:#0a0e27}
+.speed-label{color:#8892b0;font-size:12px;line-height:34px}
+
+.legend-row{display:flex;justify-content:center;gap:18px;padding:8px;flex-wrap:wrap}
+.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:#8892b0}
+.leg-c{width:30px;height:4px;border-radius:2px}
+
+/* compare table */
+.cmp-table{width:100%;border-collapse:collapse;margin-top:14px}
+.cmp-table th,.cmp-table td{padding:8px 12px;text-align:center;border:1px solid #233554;font-size:12px}
+.cmp-table th{background:#1a2744;color:#64ffda}
+.cmp-table td{background:#0d1332;color:#a8b2d1}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>EA6530 Display Controller 传输协议</h1>
+  <p>信号时序波形 + 数据流动 + 显示端逐行扫描动画</p>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab(0)">TFT Parallel RGB</button>
+  <button class="tab-btn" onclick="switchTab(1)">BT.656 嵌入同步</button>
+  <button class="tab-btn" onclick="switchTab(2)">BT.601 分离同步</button>
+  <button class="tab-btn" onclick="switchTab(3)">BT.1120 高清</button>
+  <button class="tab-btn" onclick="switchTab(4)">全面对比</button>
+</div>
+
+<div class="scene-wrap">
+
+<!-- ===== TFT ===== -->
+<div class="scene active" id="s0">
+  <div class="info-box">
+    <h3>TFT Parallel RGB — 28 根线（24数据+1时钟+3同步控制）</h3>
+    <p>每个 <span class="hl">VCLK</span> 上升沿，24 根数据线<span class="kw">并行</span>发出一个 RGB888 像素。
+    <span class="hl">DEN=1</span> 时数据有效，显示端接收并<span class="kw">逐行渲染</span>。
+    一行发完 → <span class="hl">HSYNC</span> 脉冲 → 下一行。一帧发完 → <span class="hl">VSYNC</span> 脉冲 → 下一帧。</p>
+  </div>
+  <canvas id="c0" height="700"></canvas>
+  <div class="ctrl-row">
+    <button class="ctrl-btn on" onclick="togglePlay(0,this)">⏸ 暂停</button>
+    <span class="speed-label">速度：</span>
+    <button class="ctrl-btn" onclick="setSpeed(0,0.5)">0.5x</button>
+    <button class="ctrl-btn on" onclick="setSpeed(0,1)">1x</button>
+    <button class="ctrl-btn" onclick="setSpeed(0,2)">2x</button>
+    <button class="ctrl-btn" onclick="resetAnim(0)">⟲ 重置</button>
+  </div>
+  <div class="legend-row">
+    <div class="leg"><div class="leg-c" style="background:#f7c948"></div>VCLK</div>
+    <div class="leg"><div class="leg-c" style="background:#64ffda"></div>HSYNC</div>
+    <div class="leg"><div class="leg-c" style="background:#c792ea"></div>VSYNC</div>
+    <div class="leg"><div class="leg-c" style="background:#82aaff"></div>DEN</div>
+    <div class="leg"><div class="leg-c" style="background:#ff6b6b"></div>RGB DATA</div>
+  </div>
+</div>
+
+<!-- ===== BT.656 ===== -->
+<div class="scene" id="s1">
+  <div class="info-box">
+    <h3>BT.656 嵌入同步 — 9 根线（8数据+1时钟）</h3>
+    <p>无独立 HSYNC/VSYNC 引脚。同步信号以 <span class="hl">FF 00 00 XY</span> 嵌入码形式混在数据流中。
+    接收端解析嵌入码识别行/帧边界，逐行渲染 YCbCr→RGB 后显示。
+    数据格式：<span class="kw">Cb Y Cr Y</span>（每两个像素共享一组 Cb/Cr）。</p>
+  </div>
+  <canvas id="c1" height="700"></canvas>
+  <div class="ctrl-row">
+    <button class="ctrl-btn on" onclick="togglePlay(1,this)">⏸ 暂停</button>
+    <span class="speed-label">速度：</span>
+    <button class="ctrl-btn" onclick="setSpeed(1,0.5)">0.5x</button>
+    <button class="ctrl-btn on" onclick="setSpeed(1,1)">1x</button>
+    <button class="ctrl-btn" onclick="setSpeed(1,2)">2x</button>
+    <button class="ctrl-btn" onclick="resetAnim(1)">⟲ 重置</button>
+  </div>
+  <div class="legend-row">
+    <div class="leg"><div class="leg-c" style="background:#f7c948"></div>CLK (27MHz)</div>
+    <div class="leg"><div class="leg-c" style="background:#ff6b6b"></div>EAV/SAV 嵌入码</div>
+    <div class="leg"><div class="leg-c" style="background:#64ffda"></div>Cb/Cr 色度</div>
+    <div class="leg"><div class="leg-c" style="background:#82aaff"></div>Y 亮度</div>
+  </div>
+</div>
+
+<!-- ===== BT.601 ===== -->
+<div class="scene" id="s2">
+  <div class="info-box">
+    <h3>BT.601 分离同步 — ~20 根线（16数据+1时钟+3同步）</h3>
+    <p>有独立 <span class="hl">HSYNC/VSYNC/HREF</span> 引脚，数据线上只有纯像素数据。
+    接收端直接读同步引脚，处理更简单。数据格式同 BT.656：<span class="kw">CbY CrY</span>（16-bit 并行）。</p>
+  </div>
+  <canvas id="c2" height="700"></canvas>
+  <div class="ctrl-row">
+    <button class="ctrl-btn on" onclick="togglePlay(2,this)">⏸ 暂停</button>
+    <span class="speed-label">速度：</span>
+    <button class="ctrl-btn" onclick="setSpeed(2,0.5)">0.5x</button>
+    <button class="ctrl-btn on" onclick="setSpeed(2,1)">1x</button>
+    <button class="ctrl-btn" onclick="setSpeed(2,2)">2x</button>
+    <button class="ctrl-btn" onclick="resetAnim(2)">⟲ 重置</button>
+  </div>
+  <div class="legend-row">
+    <div class="leg"><div class="leg-c" style="background:#f7c948"></div>CLK (27MHz)</div>
+    <div class="leg"><div class="leg-c" style="background:#64ffda"></div>HSYNC</div>
+    <div class="leg"><div class="leg-c" style="background:#c792ea"></div>VSYNC</div>
+    <div class="leg"><div class="leg-c" style="background:#82aaff"></div>HREF</div>
+    <div class="leg"><div class="leg-c" style="background:#ff6b6b"></div>YCbCr DATA</div>
+  </div>
+</div>
+
+<!-- ===== BT.1120 ===== -->
+<div class="scene" id="s3">
+  <div class="info-box">
+    <h3>BT.1120 高清 — 17 根线（16数据+1时钟）</h3>
+    <p>BT.656 的高清扩展，16 根数据线<span class="kw">并行</span>，嵌入同步。每时钟 2 字节，带宽翻倍支持 720p/1080i。
+    同步码为 <span class="hl">3FF 000 000 XY</span>（10-bit 扩展），典型时钟 <span class="hl">74.25 MHz</span>。</p>
+  </div>
+  <canvas id="c3" height="700"></canvas>
+  <div class="ctrl-row">
+    <button class="ctrl-btn on" onclick="togglePlay(3,this)">⏸ 暂停</button>
+    <span class="speed-label">速度：</span>
+    <button class="ctrl-btn" onclick="setSpeed(3,0.5)">0.5x</button>
+    <button class="ctrl-btn on" onclick="setSpeed(3,1)">1x</button>
+    <button class="ctrl-btn" onclick="setSpeed(3,2)">2x</button>
+    <button class="ctrl-btn" onclick="resetAnim(3)">⟲ 重置</button>
+  </div>
+  <div class="legend-row">
+    <div class="leg"><div class="leg-c" style="background:#f7c948"></div>CLK (74.25MHz)</div>
+    <div class="leg"><div class="leg-c" style="background:#ff6b6b"></div>EAV/SAV 嵌入码</div>
+    <div class="leg"><div class="leg-c" style="background:#64ffda"></div>CbCr 色度</div>
+    <div class="leg"><div class="leg-c" style="background:#82aaff"></div>Y 亮度</div>
+  </div>
+</div>
+
+<!-- ===== Compare ===== -->
+<div class="scene" id="s4">
+  <div class="info-box">
+    <h3>四种并行接口全面对比</h3>
+    <p>所有输出接口<span class="kw">全部是并行传输</span>。区别在于数据线数量、同步方式、色彩空间。当前系统使用 TFT Parallel RGB。</p>
+  </div>
+  <canvas id="c4" height="500"></canvas>
+  <table class="cmp-table">
+    <tr><th>对比项</th><th style="color:#ff6b6b">TFT RGB</th><th style="color:#f7c948">BT.656</th><th style="color:#64ffda">BT.601</th><th style="color:#c792ea">BT.1120</th></tr>
+    <tr><td>传输</td><td>并行</td><td>并行</td><td>并行</td><td>并行</td></tr>
+    <tr><td>数据线</td><td>24根</td><td>8根</td><td>8/16根</td><td>16根</td></tr>
+    <tr><td>同步</td><td>独立引脚</td><td>嵌入数据流</td><td>独立引脚</td><td>嵌入数据流</td></tr>
+    <tr><td>色彩</td><td>RGB</td><td>YCbCr</td><td>YCbCr</td><td>YCbCr</td></tr>
+    <tr><td>分辨率</td><td>1080p</td><td>SD 480i</td><td>SD 480i</td><td>HD 720p/1080i</td></tr>
+    <tr><td>时钟</td><td>148.5MHz</td><td>27MHz</td><td>27MHz</td><td>74.25MHz</td></tr>
+    <tr><td>引脚</td><td>28</td><td>9</td><td>~20</td><td>17</td></tr>
+    <tr><td>寄存器</td><td>IfType=0</td><td>IfType=1</td><td>IfType=1</td><td>IfType=1</td></tr>
+  </table>
+</div>
+
+</div><!-- scene-wrap -->
+
+<script>
+// ======== Global ========
+const anims = [];
+const initFns = [];
+const initialized = [false, false, false, false, false];
+const DPR = window.devicePixelRatio || 1;
+
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  const parent = c.parentElement;
+  const pw = parent.clientWidth - 4;
+  const logicalH = parseInt(c.getAttribute('height')) || 700;
+  c.width = pw * DPR;
+  c.height = logicalH * DPR;
+  c.style.width = pw + 'px';
+  c.style.height = logicalH + 'px';
+  const ctx = c.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  return { c, ctx, w: pw, h: logicalH };
+}
+
+function switchTab(i) {
+  document.querySelectorAll('.tab-btn').forEach((b,j) => b.classList.toggle('active', j===i));
+  document.querySelectorAll('.scene').forEach((s,j) => s.classList.toggle('active', j===i));
+  setTimeout(() => {
+    if (!initialized[i] && initFns[i]) {
+      initialized[i] = true;
+      initFns[i]();
+    }
+    if (anims[i] && anims[i].playing) {
+      cancelAnimationFrame(anims[i].raf);
+      anims[i].raf = requestAnimationFrame(anims[i].loop);
+    }
+  }, 30);
+}
+
+function togglePlay(i, btn) {
+  if (!anims[i]) return;
+  anims[i].playing = !anims[i].playing;
+  btn.textContent = anims[i].playing ? '⏸ 暂停' : '▶ 播放';
+  btn.classList.toggle('on', anims[i].playing);
+  if (anims[i].playing) anims[i].raf = requestAnimationFrame(anims[i].loop);
+}
+
+function setSpeed(i, s) {
+  if (!anims[i]) return;
+  anims[i].speed = s;
+  document.querySelectorAll(`#s${i} .ctrl-btn`).forEach(b => {
+    if (b.textContent.includes('x') && !b.textContent.includes('⟲')) {
+      b.classList.toggle('on', b.textContent === s+'x');
+    }
+  });
+}
+
+function resetAnim(i) {
+  if (!anims[i]) return;
+  anims[i].t = 0;
+  anims[i].scanLine = 0;
+  anims[i].scanPixel = 0;
+  anims[i].byteInLine = 0;
+  anims[i].pixInLine = 0;
+  anims[i].wordInLine = 0;
+  anims[i].frameCount = 0;
+  anims[i].packets = [];
+  if (anims[i].displayBuf) anims[i].displayBuf.fill(0);
+}
+
+const C = {
+  bg:'#0a0f24', panel:'#112240', border:'#233554',
+  vclk:'#f7c948', hsync:'#64ffda', vsync:'#c792ea', den:'#82aaff',
+  data:'#ff6b6b', chip:'#1a3a5c',
+  text:'#a8b2d1', dim:'#8892b0', bright:'#e0e6ed',
+  accent:'#64ffda', warn:'#ff6b6b', cbcr:'#64ffda', y:'#82aaff'
+};
+
+function RR(ctx,x,y,w,h,r,fill,stroke) {
+  ctx.beginPath(); ctx.roundRect(x,y,w,h,r);
+  if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke();}
+}
+function L(ctx,t,x,y,col,sz,al) {
+  ctx.fillStyle=col||C.text;
+  ctx.font=`${sz||12}px 'Segoe UI','PingFang SC',monospace`;
+  ctx.textAlign=al||'left';
+  ctx.fillText(t,x,y);
+}
+function drawWave(ctx,x,y,w,h,data,color,cursor,label) {
+  L(ctx,label,x-8,y+h/2+4,color,11,'right');
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  const seg=w/data.length;
+  for(let i=0;i<data.length;i++){
+    const sx=x+i*seg, v=data[i], ly=v?y:y+h;
+    if(i===0){ctx.moveTo(sx,ly);}
+    else{
+      const pv=data[i-1];
+      if(pv!==v){ctx.lineTo(sx,pv?y:y+h);ctx.lineTo(sx,ly);}
+      ctx.lineTo(sx+seg,ly);
+    }
+  }
+  ctx.stroke();
+  if(cursor>=0){
+    const cx=x+(cursor%data.length)*seg;
+    ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(cx,y-5);ctx.lineTo(cx,y+h+5);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawDisplay(ctx, buf, totalLines, pxPerLine, dx, dy, dw, dh, scanLine, scanPx, title) {
+  RR(ctx,dx-12,dy-30,dw+24,dh+75,12,'#0d0d20',C.border);
+  L(ctx,title,dx+dw/2,dy-14,C.vsync,13,'center');
+  const pw=dw/pxPerLine, ph=dh/totalLines;
+  for(let ly=0;ly<totalLines;ly++){
+    for(let px=0;px<pxPerLine;px++){
+      const idx=(ly*pxPerLine+px)*3;
+      const r=buf[idx],g=buf[idx+1],b=buf[idx+2];
+      ctx.fillStyle=(r||g||b)?`rgb(${r},${g},${b})`:'#0a0a0a';
+      ctx.fillRect(dx+px*pw,dy+ly*ph,pw-.5,ph-.5);
+    }
+  }
+  if(scanLine<totalLines && scanPx>0){
+    const sy=dy+scanLine*ph+ph/2;
+    ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.globalAlpha=0.85;
+    ctx.beginPath();ctx.moveTo(dx,sy);
+    const endX=dx+Math.min(scanPx,pxPerLine)/pxPerLine*dw;
+    ctx.lineTo(endX,sy);ctx.stroke();
+    ctx.fillStyle='#fff';ctx.beginPath();
+    ctx.moveTo(endX,sy-5);ctx.lineTo(endX+7,sy);ctx.lineTo(endX,sy+5);ctx.closePath();ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  const status=scanLine<totalLines?`正在渲染第 ${scanLine} 行 (${Math.min(Math.floor(scanPx),pxPerLine)}/${pxPerLine}像素)`:'帧完成 → 等待VSYNC → 清屏重来';
+  L(ctx,status,dx+dw/2,dy+dh+18,C.bright,11,'center');
+}
+
+// ===== SCENE 0: TFT =====
+initFns[0] = function initTFT() {
+  const {ctx,w,h} = setupCanvas('c0');
+  const NL=16, NPX=32, HT=NPX+8, VT=NL+4;
+  const dw=320,dh=200,dx=w-dw-40,dy=60;
+  const dbuf=new Uint8Array(NL*NPX*3);
+  const st={t:0,speed:1,playing:true,scanLine:0,scanPixel:0,frameCount:0,displayBuf:dbuf,packets:[]};
+
+  function gc(l,p){return[Math.floor(80+150*p/NPX),Math.floor(60+150*l/NL),Math.floor(200-120*p/NPX)];}
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    const cx=30,cy=50,cw=220,ch=240;
+    RR(ctx,cx,cy,cw,ch,12,C.chip,C.border);
+    L(ctx,'Display Controller',cx+cw/2,cy+24,C.accent,14,'center');
+    L(ctx,'OVCDCR.IfType = 0 (TFT)',cx+cw/2,cy+42,C.dim,10,'center');
+    RR(ctx,cx+15,cy+60,cw-30,30,4,C.panel,C.border);
+    L(ctx,'FIFO (24-bit RGB)',cx+cw/2,cy+80,C.text,11,'center');
+    RR(ctx,cx+15,cy+100,cw-30,30,4,C.panel,C.border);
+    L(ctx,'时序生成器',cx+cw/2,cy+120,C.text,11,'center');
+    RR(ctx,cx+15,cy+140,cw-30,30,4,C.panel,C.border);
+    L(ctx,'24-bit 并行驱动',cx+cw/2,cy+160,C.text,11,'center');
+
+    const inA=st.scanLine<NL&&st.scanPixel<NPX;
+    const sStr=inA?`发送: 第${st.scanLine}行 第${Math.floor(st.scanPixel)}像素`:st.scanLine<NL?'行消隐 (HFP/HSYNC/HBP)':'帧消隐 (VFP/VSYNC/VBP)';
+    RR(ctx,cx+15,cy+185,cw-30,35,4,inA?'#1a4030':'#3a2020',inA?'#64ffda55':'#ff6b6b55');
+    L(ctx,sStr,cx+cw/2,cy+207,inA?C.accent:C.warn,11,'center');
+
+    const lsx=cx+cw, lex=dx, ly0=cy+80, gap=28;
+    const sigs=[
+      {l:'RGB_DATA[23:0] (24根)',c:C.data,y:ly0,th:4},
+      {l:'VCLK (148.5MHz)',c:C.vclk,y:ly0+gap,th:2},
+      {l:'HSYNC',c:C.hsync,y:ly0+gap*2,th:2},
+      {l:'VSYNC',c:C.vsync,y:ly0+gap*3,th:2},
+      {l:'DEN',c:C.den,y:ly0+gap*4,th:2},
+    ];
+    sigs.forEach(s=>{
+      const active=inA&&s.l.includes('DATA');
+      ctx.strokeStyle=s.c;ctx.lineWidth=s.th;ctx.globalAlpha=active?1:0.5;
+      ctx.beginPath();ctx.moveTo(lsx+5,s.y);ctx.lineTo(lex-5,s.y);ctx.stroke();
+      ctx.globalAlpha=1;
+      L(ctx,s.l,(lsx+lex)/2,s.y-8,s.c,10,'center');
+
+      if(s.l.includes('HSYNC')){
+        const isHSync=!inA&&st.scanLine<NL;
+        const indicator=isHSync?'◀ 拉低中':'高电平';
+        L(ctx,indicator,lex-60,s.y+4,isHSync?C.warn:C.dim,9,'center');
+      }
+      if(s.l.includes('VSYNC')){
+        const isVSync=st.scanLine>=NL+1&&st.scanLine<NL+3;
+        const indicator=isVSync?'◀ 拉低中':'高电平';
+        L(ctx,indicator,lex-60,s.y+4,isVSync?C.warn:C.dim,9,'center');
+      }
+      if(s.l==='DEN'){
+        L(ctx,inA?'◀ HIGH (有效)':'LOW',lex-60,s.y+4,inA?C.accent:C.dim,9,'center');
+      }
+    });
+
+    if(inA){
+      const pkts=st.packets, now=st.t;
+      if(Math.floor(now)%4===0){
+        const [r,g,b]=gc(st.scanLine,Math.floor(st.scanPixel));
+        pkts.push({x:lsx+10,color:`rgb(${r},${g},${b})`,born:now});
+      }
+      for(let i=pkts.length-1;i>=0;i--){
+        const p=pkts[i], age=now-p.born;
+        p.x=lsx+10+age*5;
+        if(p.x>lex-10){pkts.splice(i,1);continue;}
+        ctx.fillStyle=p.color;ctx.globalAlpha=0.9;
+        ctx.fillRect(p.x-8,ly0-6,16,12);ctx.globalAlpha=1;
+      }
+    }
+
+    drawDisplay(ctx,dbuf,NL,NPX,dx,dy,dw,dh,st.scanLine,st.scanPixel,'LCD 显示面板');
+    L(ctx,`帧: ${st.frameCount}`,dx+dw/2,dy+dh+36,C.dim,10,'center');
+
+    const wY=340;
+    RR(ctx,20,wY-20,w-40,330,10,'#0d1230',C.border);
+    L(ctx,'信号时序波形图 (一帧内多行扫描)',30,wY-4,C.accent,13);
+    const ns=160,sH=24,sG=55,wX=60,wW=w-100;
+    const vd=[],hd=[],vsd=[],dd=[],dv=[];
+    for(let i=0;i<ns;i++){
+      const li=Math.floor(i/HT),pi=i%HT;
+      vd.push(i%2);
+      const vb=li>=NL,ha=pi<NPX&&!vb;
+      dd.push(ha?1:0); dv.push(ha?1:0);
+      hd.push(pi>=NPX+2&&pi<NPX+5?0:1);
+      vsd.push(li>=NL+1&&li<NL+3?0:1);
+    }
+    const cur=Math.floor(st.t*0.8)%ns;
+    [{d:vd,c:C.vclk,l:'VCLK'},{d:dd,c:C.den,l:'DEN'},{d:dv,c:C.data,l:'DATA'},{d:hd,c:C.hsync,l:'HSYNC'},{d:vsd,c:C.vsync,l:'VSYNC'}]
+    .forEach((s,i)=>{
+      drawWave(ctx,wX+50,wY+20+i*sG,wW-80,sH,s.d,s.c,cur,s.l);
+      if(s.l==='DATA'){
+        const seg=(wW-80)/ns;
+        for(let j=0;j<ns;j+=HT){
+          const sx=wX+50+j*seg,li2=Math.floor(j/HT);
+          if(li2<NL){ctx.fillStyle='#ff6b6b33';ctx.fillRect(sx,wY+20+2*sG+sH+2,NPX*seg,13);L(ctx,`行${li2} RGB`,sx+2,wY+20+2*sG+sH+13,C.data,8);}
+        }
+        L(ctx,'← DEN=1: 有效像素区 →',wX+60,wY+20+1*sG-6,C.den,9);
+      }
+    });
+    const aY=wY+20+5*sG-10;
+    L(ctx,'一行: |← 有效像素(DEN=1) →|HFP|HSYNC↓|HBP| → 下一行',wX+50,aY,C.dim,10);
+    L(ctx,'一帧结束: VSYNC↓ → VBP → 新帧第0行开始 (显示面板清屏)',wX+50,aY+16,C.dim,10);
+    const csX=wX+50+cur*((wW-80)/ns);
+    L(ctx,`t=${cur}`,csX,wY+12,'#fff',9,'center');
+  }
+
+  function tick(){
+    if(!st.playing)return;
+    st.t+=st.speed;
+    st.scanPixel+=st.speed;
+    if(st.scanPixel>=HT){
+      st.scanPixel=0;st.scanLine++;
+      if(st.scanLine>=VT){st.scanLine=0;st.frameCount++;st.packets=[];dbuf.fill(0);}
+    }
+    if(st.scanLine<NL&&st.scanPixel<NPX){
+      const px=Math.floor(st.scanPixel),[r,g,b]=gc(st.scanLine,px);
+      const idx=(st.scanLine*NPX+px)*3;
+      dbuf[idx]=r;dbuf[idx+1]=g;dbuf[idx+2]=b;
+    }
+  }
+
+  st.loop=function loop(){tick();draw();if(st.playing)st.raf=requestAnimationFrame(loop);};
+  anims[0]=st;
+  st.raf=requestAnimationFrame(st.loop);
+};
+
+// ===== SCENE 1: BT.656 =====
+initFns[1] = function initBT656() {
+  const {ctx,w,h} = setupCanvas('c1');
+  const NL=12,NPX=24,SB=4,BLK=4;
+  const BPL=SB+NPX*2+BLK+SB;
+  const dw=280,dh=180,dx=w-dw-40,dy=60;
+  const dbuf=new Uint8Array(NL*NPX*3);
+  const st={t:0,speed:1,playing:true,scanLine:0,byteInLine:0,frameCount:0,displayBuf:dbuf,packets:[],scanPixel:0,pixInLine:0,wordInLine:0};
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    const cx=30,cy=50,cw=220,ch=230;
+    RR(ctx,cx,cy,cw,ch,12,C.chip,C.border);
+    L(ctx,'Display Controller',cx+cw/2,cy+24,C.accent,14,'center');
+    L(ctx,'OVCDCR.IfType = 1 (TV)',cx+cw/2,cy+42,C.dim,10,'center');
+    RR(ctx,cx+15,cy+58,cw-30,28,4,C.panel,C.border);
+    L(ctx,'RGB→YCbCr 矩阵',cx+cw/2,cy+77,C.text,11,'center');
+    RR(ctx,cx+15,cy+94,cw-30,28,4,C.panel,C.border);
+    L(ctx,'嵌入同步码生成',cx+cw/2,cy+113,C.text,11,'center');
+    RR(ctx,cx+15,cy+130,cw-30,28,4,'#2a1515','#ff6b6b55');
+    L(ctx,'8-bit 并行输出',cx+cw/2,cy+149,C.warn,11,'center');
+
+    const bil=st.byteInLine;
+    const inSAV=bil<SB;
+    const inEAV=bil>=SB+NPX*2+BLK;
+    const inData=!inSAV&&!inEAV&&bil<SB+NPX*2;
+    const inBlk=!inSAV&&!inEAV&&!inData;
+    const sStr=inSAV?'发送 SAV (FF 00 00 XY)':inEAV?'发送 EAV (FF 00 00 XY)':inData?`像素数据 行${st.scanLine}`:inBlk?'行消隐':'帧消隐';
+    RR(ctx,cx+15,cy+170,cw-30,35,4,inData?'#1a4030':'#2a2010',inData?'#64ffda55':'#f7c94855');
+    L(ctx,sStr,cx+cw/2,cy+192,inData?C.accent:C.vclk,11,'center');
+
+    const lsx=cx+cw,lex=dx,ly0=cy+80;
+    ctx.strokeStyle=C.data;ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(lsx+5,ly0);ctx.lineTo(lex-5,ly0);ctx.stroke();
+    L(ctx,'DATA[7:0] — 8根并行',(lsx+lex)/2,ly0-10,C.data,10,'center');
+    ctx.strokeStyle=C.vclk;ctx.lineWidth=2;ctx.setLineDash([6,4]);
+    ctx.beginPath();ctx.moveTo(lsx+5,ly0+30);ctx.lineTo(lex-5,ly0+30);ctx.stroke();ctx.setLineDash([]);
+    L(ctx,'CLK — 27 MHz',(lsx+lex)/2,ly0+22,C.vclk,10,'center');
+    L(ctx,'⚠ 无 HSYNC/VSYNC 引脚',(lsx+lex)/2,ly0+55,C.warn,11,'center');
+
+    const streamY=ly0-4,byteW=14,ssx=lsx+20;
+    const maxB=Math.min(Math.floor((lex-lsx-40)/byteW),BPL);
+    for(let i=0;i<maxB&&i<BPL;i++){
+      const bx=ssx+i*byteW;
+      let col,label;
+      if(i<SB){col=C.warn;label=['FF','00','00','XY'][i];}
+      else if(i<SB+NPX*2){const pi=i-SB;col=pi%2===0?C.cbcr:C.y;label=pi%2===0?(Math.floor(pi/4)%2===0?'Cb':'Cr'):'Y';}
+      else if(i<SB+NPX*2+BLK){col='#333';label='';}
+      else{col=C.warn;label=['FF','00','00','XY'][i-(SB+NPX*2+BLK)];}
+      const isAct=Math.floor(bil)===i;
+      ctx.fillStyle=isAct?col:col+'44';
+      ctx.fillRect(bx,streamY-4,byteW-1,10);
+      if(label&&byteW>10)L(ctx,label,bx+byteW/2,streamY+20,col,7,'center');
+    }
+
+    const curPx=inData?Math.floor((bil-SB)/2):0;
+    drawDisplay(ctx,dbuf,NL,NPX,dx,dy,dw,dh,st.scanLine,inData?curPx:0,'TV 编码器 / 接收端');
+    RR(ctx,dx-5,dy+dh+8,dw+10,22,4,C.panel,C.border);
+    L(ctx,'解析嵌入码→识别行/帧边界→逐行显示',dx+dw/2,dy+dh+23,C.dim,10,'center');
+
+    const wY=340;
+    RR(ctx,20,wY-20,w-40,320,10,'#0d1230',C.border);
+    L(ctx,'数据流时序（无独立同步信号，同步嵌入数据中）',30,wY-4,C.accent,13);
+    const ns=120,sH=22,sG=50,wX=80,wW=w-130;
+    const ck=[],dd2=[],es=[];
+    for(let i=0;i<ns;i++){
+      ck.push(i%2);
+      const bInL=i%BPL,isSyn=bInL<SB||bInL>=SB+NPX*2+BLK;
+      es.push(isSyn?1:0);
+      dd2.push(!isSyn&&bInL<SB+NPX*2?1:0);
+    }
+    const cT=Math.floor(st.t*0.6)%ns;
+    [{d:ck,c:C.vclk,l:'CLK'},{d:es,c:C.warn,l:'SAV/EAV'},{d:dd2,c:C.y,l:'Pixel'}]
+    .forEach((s,i)=>drawWave(ctx,wX,wY+20+i*sG,wW,sH,s.d,s.c,cT,s.l));
+    const aY=wY+20+3*sG;
+    L(ctx,'数据流: | SAV(FF 00 00 XY) | Cb Y Cr Y ... | 消隐 | EAV(FF 00 00 XY) |',wX,aY,C.dim,10);
+    L(ctx,'接收端: 看到 FF 00 00 → 同步码 → 判断行首(SAV)/行尾(EAV)',wX,aY+16,C.dim,10);
+    L(ctx,'XY 编码: F(场), V(帧消隐), H(行消隐) → 代替了 HSYNC/VSYNC',wX,aY+32,C.dim,10);
+  }
+
+  function tick(){
+    if(!st.playing)return;
+    st.t+=st.speed;
+    st.byteInLine+=st.speed;
+    if(st.byteInLine>=BPL){st.byteInLine=0;st.scanLine++;if(st.scanLine>=NL+4){st.scanLine=0;st.frameCount++;dbuf.fill(0);}}
+    if(st.scanLine<NL){
+      const ds=SB,de=SB+NPX*2;
+      if(st.byteInLine>=ds&&st.byteInLine<de){
+        const px=Math.floor((st.byteInLine-ds)/2);
+        if(px<NPX){
+          const r=80+Math.floor(140*px/NPX),g=120+Math.floor(100*st.scanLine/NL),b=180;
+          const idx=(st.scanLine*NPX+px)*3;
+          dbuf[idx]=r;dbuf[idx+1]=g;dbuf[idx+2]=b;
+        }
+      }
+    }
+  }
+
+  st.loop=function loop(){tick();draw();if(st.playing)st.raf=requestAnimationFrame(loop);};
+  anims[1]=st;
+  st.raf=requestAnimationFrame(st.loop);
+};
+
+// ===== SCENE 2: BT.601 =====
+initFns[2] = function initBT601() {
+  const {ctx,w,h} = setupCanvas('c2');
+  const NL=12,NPX=24,HT=NPX+6;
+  const dw=280,dh=180,dx=w-dw-40,dy=60;
+  const dbuf=new Uint8Array(NL*NPX*3);
+  const st={t:0,speed:1,playing:true,scanLine:0,pixInLine:0,frameCount:0,displayBuf:dbuf,packets:[],scanPixel:0,byteInLine:0,wordInLine:0};
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    const cx=30,cy=50,cw=220,ch=230;
+    RR(ctx,cx,cy,cw,ch,12,C.chip,C.border);
+    L(ctx,'Display Controller',cx+cw/2,cy+24,C.accent,14,'center');
+    L(ctx,'BT.601 分离同步',cx+cw/2,cy+42,C.dim,10,'center');
+    RR(ctx,cx+15,cy+58,cw-30,28,4,C.panel,C.border);
+    L(ctx,'RGB→YCbCr 矩阵',cx+cw/2,cy+77,C.text,11,'center');
+    RR(ctx,cx+15,cy+94,cw-30,28,4,C.panel,C.border);
+    L(ctx,'分离同步信号生成',cx+cw/2,cy+113,C.text,11,'center');
+    RR(ctx,cx+15,cy+130,cw-30,28,4,'#2a1515','#ff6b6b55');
+    L(ctx,'16-bit 并行输出',cx+cw/2,cy+149,C.warn,11,'center');
+
+    const inA=st.scanLine<NL&&st.pixInLine<NPX;
+    RR(ctx,cx+15,cy+170,cw-30,35,4,inA?'#1a4030':'#2a2010',inA?'#64ffda55':'#f7c94855');
+    L(ctx,inA?`行${st.scanLine} 像素${Math.floor(st.pixInLine)}`:'消隐期',cx+cw/2,cy+192,inA?C.accent:C.vclk,11,'center');
+
+    const lsx=cx+cw,lex=dx,ly0=cy+65,gap=26;
+    const isHS=st.pixInLine>=NPX+1&&st.pixInLine<NPX+3&&st.scanLine<NL;
+    const isVS=st.scanLine>=NL+1&&st.scanLine<NL+3;
+    const sigs=[
+      {l:'DATA[15:0] (16根并行)',c:C.data,th:3},
+      {l:'CLK (27MHz)',c:C.vclk,th:2,dash:true},
+      {l:'HSYNC'+(isHS?' ◀ 拉低':''),c:C.hsync,th:2},
+      {l:'VSYNC'+(isVS?' ◀ 拉低':''),c:C.vsync,th:2},
+      {l:'HREF'+(inA?' ◀ HIGH':''),c:C.den,th:2},
+    ];
+    sigs.forEach((s,i)=>{
+      const y=ly0+i*gap;
+      ctx.strokeStyle=s.c;ctx.lineWidth=s.th;
+      if(s.dash)ctx.setLineDash([6,4]);
+      ctx.beginPath();ctx.moveTo(lsx+5,y);ctx.lineTo(lex-5,y);ctx.stroke();ctx.setLineDash([]);
+      L(ctx,s.l,(lsx+lex)/2,y-8,s.c,9,'center');
+    });
+
+    if(inA){
+      const pkts=st.packets,now=st.t;
+      if(Math.floor(now)%3===0){
+        const px=Math.floor(st.pixInLine);
+        const alt=px%2===0;
+        pkts.push({x:lsx+10,label:alt?'CbY':'CrY',color:alt?C.cbcr:C.y,born:now});
+      }
+      for(let i=pkts.length-1;i>=0;i--){
+        const p=pkts[i],age=now-p.born;
+        p.x=lsx+10+age*5;
+        if(p.x>lex-10){pkts.splice(i,1);continue;}
+        ctx.fillStyle=p.color;ctx.globalAlpha=0.85;
+        RR(ctx,p.x-14,ly0-8,28,16,4,p.color+'cc',null);
+        ctx.globalAlpha=1;
+        L(ctx,p.label,p.x,ly0+4,'#fff',8,'center');
+      }
+    }
+
+    drawDisplay(ctx,dbuf,NL,NPX,dx,dy,dw,dh,st.scanLine,st.pixInLine,'TV 编码器（读同步引脚）');
+    L(ctx,`帧: ${st.frameCount}`,dx+dw/2,dy+dh+36,C.dim,10,'center');
+
+    const wY=340;
+    RR(ctx,20,wY-20,w-40,320,10,'#0d1230',C.border);
+    L(ctx,'信号时序（有独立 HSYNC/VSYNC — 与 TFT 类似）',30,wY-4,C.accent,13);
+    const ns=120,sH=22,sG=50,wX=80,wW=w-130;
+    const ck=[],hr=[],dt=[],hs=[],vs=[];
+    for(let i=0;i<ns;i++){
+      ck.push(i%2);
+      const li=Math.floor(i/HT),pi=i%HT,vb=li>=NL,ha=pi<NPX&&!vb;
+      hs.push(pi>=NPX+1&&pi<NPX+3?0:1);
+      vs.push(li>=NL+1&&li<NL+3?0:1);
+      hr.push(ha?1:0);dt.push(ha?1:0);
+    }
+    const cT=Math.floor(st.t*0.6)%ns;
+    [{d:ck,c:C.vclk,l:'CLK'},{d:hr,c:C.den,l:'HREF'},{d:dt,c:C.data,l:'DATA'},{d:hs,c:C.hsync,l:'HSYNC'},{d:vs,c:C.vsync,l:'VSYNC'}]
+    .forEach((s,i)=>drawWave(ctx,wX,wY+20+i*sG,wW,sH,s.d,s.c,cT,s.l));
+    const aY=wY+20+5*sG;
+    L(ctx,'与TFT类似: 独立HSYNC/VSYNC引脚, HREF≈DEN',wX,aY,C.dim,10);
+    L(ctx,'区别: 数据是YCbCr(16-bit), 对接TV编码器',wX,aY+16,C.dim,10);
+  }
+
+  function tick(){
+    if(!st.playing)return;
+    st.t+=st.speed;st.pixInLine+=st.speed;
+    if(st.pixInLine>=HT){st.pixInLine=0;st.scanLine++;if(st.scanLine>=NL+4){st.scanLine=0;st.frameCount++;dbuf.fill(0);}}
+    if(st.scanLine<NL&&st.pixInLine<NPX){
+      const px=Math.floor(st.pixInLine);
+      const r=100+Math.floor(120*px/NPX),g=80+Math.floor(140*st.scanLine/NL),b=200-Math.floor(80*px/NPX);
+      const idx=(st.scanLine*NPX+px)*3;
+      dbuf[idx]=r;dbuf[idx+1]=g;dbuf[idx+2]=b;
+    }
+  }
+
+  st.loop=function loop(){tick();draw();if(st.playing)st.raf=requestAnimationFrame(loop);};
+  anims[2]=st;
+  st.raf=requestAnimationFrame(st.loop);
+};
+
+// ===== SCENE 3: BT.1120 =====
+initFns[3] = function initBT1120() {
+  const {ctx,w,h} = setupCanvas('c3');
+  const NL=12,NPX=24,SW=4,BLK=2;
+  const WPL=SW+NPX+BLK+SW;
+  const dw=280,dh=180,dx=w-dw-40,dy=60;
+  const dbuf=new Uint8Array(NL*NPX*3);
+  const st={t:0,speed:1,playing:true,scanLine:0,wordInLine:0,frameCount:0,displayBuf:dbuf,packets:[],scanPixel:0,byteInLine:0,pixInLine:0};
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    const cx=30,cy=50,cw=220,ch=230;
+    RR(ctx,cx,cy,cw,ch,12,C.chip,C.border);
+    L(ctx,'Display Controller',cx+cw/2,cy+24,C.accent,14,'center');
+    L(ctx,'BT.1120 高清模式',cx+cw/2,cy+42,C.dim,10,'center');
+    RR(ctx,cx+15,cy+58,cw-30,28,4,C.panel,C.border);
+    L(ctx,'RGB→YCbCr 矩阵',cx+cw/2,cy+77,C.text,11,'center');
+    RR(ctx,cx+15,cy+94,cw-30,28,4,C.panel,C.border);
+    L(ctx,'嵌入同步码 (HD)',cx+cw/2,cy+113,C.text,11,'center');
+    RR(ctx,cx+15,cy+130,cw-30,28,4,'#2a1515','#ff6b6b55');
+    L(ctx,'16-bit 并行输出',cx+cw/2,cy+149,C.warn,11,'center');
+
+    const wil=st.wordInLine;
+    const inSAV=wil<SW,inEAV=wil>=SW+NPX+BLK;
+    const inData=!inSAV&&!inEAV&&wil<SW+NPX;
+    RR(ctx,cx+15,cy+170,cw-30,35,4,inData?'#1a4030':'#2a2010',inData?'#64ffda55':'#f7c94855');
+    L(ctx,inSAV?'SAV(3FF 000 000 XY)':inEAV?'EAV':inData?`HD像素 行${st.scanLine}`:'消隐',cx+cw/2,cy+192,inData?C.accent:C.vclk,11,'center');
+
+    const lsx=cx+cw,lex=dx,ly0=cy+85;
+    ctx.strokeStyle=C.data;ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(lsx+5,ly0);ctx.lineTo(lex-5,ly0);ctx.stroke();
+    L(ctx,'DATA[15:0] — 16根并行(每CLK 2字节)',(lsx+lex)/2,ly0-10,C.data,10,'center');
+    ctx.strokeStyle=C.vclk;ctx.lineWidth=2;ctx.setLineDash([6,4]);
+    ctx.beginPath();ctx.moveTo(lsx+5,ly0+30);ctx.lineTo(lex-5,ly0+30);ctx.stroke();ctx.setLineDash([]);
+    L(ctx,'CLK — 74.25 MHz (2×BT.656→HD)',(lsx+lex)/2,ly0+22,C.vclk,10,'center');
+    L(ctx,'⚠ 无独立同步引脚，嵌入同步',(lsx+lex)/2,ly0+55,C.warn,11,'center');
+
+    if(inSAV||inEAV||inData){
+      const pkts=st.packets,now=st.t;
+      if(Math.floor(now)%3===0){
+        if(inSAV||inEAV){
+          pkts.push({x:lsx+10,label:inSAV?'SAV':'EAV',color:C.warn,born:now});
+        } else {
+          const px=Math.floor(wil-SW);
+          const alt=px%2===0;
+          pkts.push({x:lsx+10,label:alt?'CbY':'CrY',color:alt?C.cbcr:C.y,born:now});
+        }
+      }
+      for(let i=pkts.length-1;i>=0;i--){
+        const p=pkts[i],age=now-p.born;
+        p.x=lsx+10+age*5;
+        if(p.x>lex-10){pkts.splice(i,1);continue;}
+        ctx.globalAlpha=0.85;
+        RR(ctx,p.x-16,ly0-8,32,16,4,p.color+'cc',null);
+        ctx.globalAlpha=1;
+        L(ctx,p.label,p.x,ly0+4,'#fff',8,'center');
+      }
+    }
+
+    const curPx=inData?Math.floor(wil-SW):0;
+    drawDisplay(ctx,dbuf,NL,NPX,dx,dy,dw,dh,st.scanLine,inData?curPx:0,'HD TV 编码器 (720p/1080i)');
+
+    const wY=340;
+    RR(ctx,20,wY-20,w-40,320,10,'#0d1230',C.border);
+    L(ctx,'BT.1120: 16-bit并行嵌入同步（BT.656的HD扩展）',30,wY-4,C.accent,13);
+    const ns=100,sH=22,sG=50,wX=80,wW=w-130;
+    const ck=[],sv=[],dt=[];
+    for(let i=0;i<ns;i++){
+      ck.push(i%2);
+      const wInL=i%WPL,isSyn=wInL<SW||wInL>=SW+NPX+BLK;
+      sv.push(isSyn?1:0);
+      dt.push(!isSyn&&wInL<SW+NPX?1:0);
+    }
+    const cT=Math.floor(st.t*.6)%ns;
+    [{d:ck,c:C.vclk,l:'CLK'},{d:sv,c:C.warn,l:'SAV/EAV'},{d:dt,c:C.y,l:'Pixel'}]
+    .forEach((s,i)=>drawWave(ctx,wX,wY+20+i*sG,wW,sH,s.d,s.c,cT,s.l));
+    const aY=wY+20+3*sG;
+    L(ctx,'每CLK 16-bit: 同时传CbY或CrY → 带宽=BT.656×2 → 720p/1080i',wX,aY,C.dim,10);
+    L(ctx,'同步码: 3FF 000 000 XY (10-bit避免与像素冲突)',wX,aY+16,C.dim,10);
+  }
+
+  function tick(){
+    if(!st.playing)return;
+    st.t+=st.speed;st.wordInLine+=st.speed;
+    if(st.wordInLine>=WPL){st.wordInLine=0;st.scanLine++;if(st.scanLine>=NL+4){st.scanLine=0;st.frameCount++;dbuf.fill(0);}}
+    if(st.scanLine<NL&&st.wordInLine>=SW&&st.wordInLine<SW+NPX){
+      const px=Math.floor(st.wordInLine-SW);
+      if(px<NPX){
+        const r=60+Math.floor(160*px/NPX),g=100+Math.floor(120*st.scanLine/NL),b=220-Math.floor(100*px/NPX);
+        const idx=(st.scanLine*NPX+px)*3;
+        dbuf[idx]=r;dbuf[idx+1]=g;dbuf[idx+2]=b;
+      }
+    }
+  }
+
+  st.loop=function loop(){tick();draw();if(st.playing)st.raf=requestAnimationFrame(loop);};
+  anims[3]=st;
+  st.raf=requestAnimationFrame(st.loop);
+};
+
+// ===== SCENE 4: Compare =====
+initFns[4] = function initCompare() {
+  const {ctx,w,h} = setupCanvas('c4');
+  let animT=0;
+  const st={t:0,speed:1,playing:true,scanLine:0,scanPixel:0,byteInLine:0,pixInLine:0,wordInLine:0,frameCount:0};
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    animT=Math.min(animT+0.02,1);
+    const ease=1-Math.pow(1-animT,3);
+    L(ctx,'引脚数量对比 (全部为并行传输)',w/2,30,C.accent,16,'center');
+    const bars=[
+      {label:'TFT RGB',pins:28,detail:'24D+1C+3S',color:'#ff6b6b'},
+      {label:'BT.601\n分离同步',pins:20,detail:'16D+1C+3S',color:'#64ffda'},
+      {label:'BT.1120\n高清',pins:17,detail:'16D+1C',color:'#c792ea'},
+      {label:'BT.656\n嵌入同步',pins:9,detail:'8D+1C',color:'#f7c948'},
+    ];
+    const bW=100,gap=40,maxH=300,baseY=420;
+    const tw=bars.length*bW+(bars.length-1)*gap;
+    const sx=(w-tw)/2;
+    bars.forEach((b,i)=>{
+      const x=sx+i*(bW+gap),bh=(b.pins/30)*maxH*ease;
+      RR(ctx,x,baseY-bh,bW,bh,8,b.color+'99',b.color);
+      L(ctx,b.pins.toString(),x+bW/2,baseY-bh-12,b.color,18,'center');
+      L(ctx,b.detail,x+bW/2,baseY-bh-30,C.dim,10,'center');
+      b.label.split('\n').forEach((l,li)=>L(ctx,l,x+bW/2,baseY+18+li*15,C.bright,12,'center'));
+    });
+    ctx.strokeStyle=C.border;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(sx-20,baseY);ctx.lineTo(sx+tw+20,baseY);ctx.stroke();
+    RR(ctx,40,baseY+50,w-80,30,6,C.panel,C.border);
+    L(ctx,'结论: 全部是并行传输，无串行。差异=数据线宽度+是否有独立同步引脚',w/2,baseY+70,C.accent,12,'center');
+  }
+
+  st.loop=function loop(){draw();if(st.playing)st.raf=requestAnimationFrame(loop);};
+  anims[4]=st;
+  st.raf=requestAnimationFrame(st.loop);
+};
+
+// ======== Boot ========
+window.addEventListener('load', () => {
+  initialized[0] = true;
+  initFns[0]();
+});
+
+window.addEventListener('resize', () => {
+  anims.forEach(a => { if(a && a.raf) cancelAnimationFrame(a.raf); });
+  for (let i = 0; i < 5; i++) {
+    if (initialized[i]) {
+      const scene = document.getElementById('s'+i);
+      if (scene && scene.classList.contains('active')) {
+        initFns[i]();
+      } else {
+        initialized[i] = false;
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>

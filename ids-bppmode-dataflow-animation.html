@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDS BPPMODE 数据通路动画</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e1a;
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    color: #e0e6f0;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+  .header {
+    text-align: center;
+    padding: 24px 20px 12px;
+    background: linear-gradient(180deg, #111827 0%, #0a0e1a 100%);
+  }
+  .header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    background: linear-gradient(90deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+  .header p { font-size: 13px; color: #6b7280; }
+
+  .canvas-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 10px 20px 20px;
+  }
+  svg { filter: drop-shadow(0 0 40px rgba(96,165,250,0.08)); }
+
+  /* Module box styles */
+  .mod-ddr    { fill: #1e293b; stroke: #334155; stroke-width: 1.5; rx: 10; }
+  .mod-ovc    { fill: #172033; stroke: #3b82f6; stroke-width: 1.5; rx: 10; }
+  .mod-fifo   { fill: #1a1a2e; stroke: #8b5cf6; stroke-width: 1.5; rx: 8; }
+  .mod-dispc  { fill: #1a2332; stroke: #10b981; stroke-width: 1.5; rx: 10; }
+  .mod-output { fill: #1e1b2e; stroke: #6366f1; stroke-width: 1.5; rx: 8; }
+
+  .mod-fb0  { fill: #1e3a3a; stroke: #14b8a6; stroke-width: 1.2; rx: 6; }
+  .mod-fb1  { fill: #2a1f3d; stroke: #c084fc; stroke-width: 1.2; rx: 6; }
+  .mod-bpp0 { fill: #1c2d40; stroke: #38bdf8; stroke-width: 1.2; rx: 6; }
+  .mod-bpp1 { fill: #2d1c40; stroke: #c084fc; stroke-width: 1.2; rx: 6; }
+  .mod-blend { fill: #1f2937; stroke: #f59e0b; stroke-width: 1.2; rx: 6; }
+
+  .label {
+    font-size: 13px; font-weight: 600; fill: #e0e6f0;
+    text-anchor: middle; dominant-baseline: middle;
+  }
+  .label-sm {
+    font-size: 10.5px; fill: #9ca3af;
+    text-anchor: middle; dominant-baseline: middle;
+  }
+  .label-xs {
+    font-size: 9px; fill: #6b7280;
+    text-anchor: middle; dominant-baseline: middle;
+  }
+  .label-reg {
+    font-size: 9.5px; fill: #fbbf24; font-family: 'Courier New', monospace;
+    text-anchor: middle; dominant-baseline: middle;
+  }
+  .label-addr {
+    font-size: 8.5px; fill: #4b5563; font-family: 'Courier New', monospace;
+    text-anchor: middle; dominant-baseline: middle;
+  }
+  .label-title {
+    font-size: 14px; font-weight: 700; fill: #93c5fd;
+    text-anchor: middle; dominant-baseline: middle;
+  }
+  .label-section {
+    font-size: 11px; font-weight: 600;
+    text-anchor: start; dominant-baseline: middle;
+  }
+
+  .arrow-line {
+    stroke: #475569; stroke-width: 1.5;
+    fill: none; marker-end: url(#arrowhead);
+  }
+  .arrow-line-active {
+    stroke-width: 2;
+    fill: none; marker-end: url(#arrowhead-glow);
+  }
+
+  /* Data packet animations */
+  .packet {
+    opacity: 0;
+  }
+  .packet-nv12  { fill: #14b8a6; }
+  .packet-argb  { fill: #c084fc; }
+  .packet-rgb   { fill: #3b82f6; }
+  .packet-rgb24 { fill: #60a5fa; }
+  .packet-out   { fill: #10b981; }
+
+  /* Glow effects */
+  .glow-cyan   { filter: drop-shadow(0 0 6px rgba(20,184,166,0.6)); }
+  .glow-purple { filter: drop-shadow(0 0 6px rgba(192,132,252,0.6)); }
+  .glow-blue   { filter: drop-shadow(0 0 6px rgba(59,130,246,0.6)); }
+  .glow-green  { filter: drop-shadow(0 0 6px rgba(16,185,129,0.6)); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    padding: 8px 20px 20px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #9ca3af;
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 20px 16px;
+  }
+  .controls button {
+    padding: 8px 20px;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    background: #1f2937;
+    color: #d1d5db;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .controls button:hover {
+    background: #374151;
+    border-color: #60a5fa;
+    color: #fff;
+  }
+  .controls button.active {
+    background: #1e3a5f;
+    border-color: #3b82f6;
+    color: #93c5fd;
+  }
+
+  .step-info {
+    text-align: center;
+    padding: 0 20px 16px;
+    min-height: 44px;
+  }
+  .step-info .step-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #93c5fd;
+    margin-bottom: 2px;
+  }
+  .step-info .step-desc {
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  /* ===== 格式转换面板 ===== */
+  .fmt-panel {
+    max-width: 980px;
+    margin: 0 auto 30px;
+    padding: 0 20px;
+  }
+  .fmt-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, #1e293b 0%, #172033 100%);
+    border: 1px solid #334155;
+    border-radius: 10px 10px 0 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .fmt-panel-header:hover { border-color: #3b82f6; }
+  .fmt-panel-header h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #93c5fd;
+    margin: 0;
+  }
+  .fmt-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    margin-left: 10px;
+    background: #1e3a5f;
+    border: 1px solid #3b82f6;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #93c5fd;
+  }
+  .fmt-toggle {
+    font-size: 16px;
+    color: #6b7280;
+    transition: transform 0.3s;
+  }
+  .fmt-toggle.collapsed { transform: rotate(-90deg); }
+  .fmt-panel-body {
+    background: #111827;
+    border: 1px solid #334155;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 20px;
+    transition: max-height 0.4s ease;
+    overflow: hidden;
+  }
+  .fmt-panel-body.collapsed {
+    max-height: 0;
+    padding: 0 20px;
+    border: none;
+  }
+
+  .fmt-summary {
+    margin-bottom: 20px;
+  }
+  .fmt-summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .fmt-cat-card {
+    flex: 0 0 140px;
+    padding: 12px 10px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid;
+  }
+  .fmt-cat-pal    { background: #1a2332; border-color: #f59e0b; }
+  .fmt-cat-expand { background: #1c2d40; border-color: #38bdf8; }
+  .fmt-cat-direct { background: #2a1f3d; border-color: #c084fc; }
+  .fmt-cat-yuv    { background: #1e3a3a; border-color: #14b8a6; }
+  .fmt-cat-output { background: #1a2e1a; border-color: #10b981; }
+  .fmt-cat-icon   { font-size: 20px; margin-bottom: 4px; }
+  .fmt-cat-title  { font-size: 12px; font-weight: 700; color: #e0e6f0; }
+  .fmt-cat-count  { font-size: 11px; color: #9ca3af; margin: 2px 0; }
+  .fmt-cat-desc   { font-size: 10px; color: #6b7280; }
+  .fmt-cat-ids    { font-size: 9px; color: #4b5563; font-family: 'Courier New', monospace; margin-top: 4px; }
+  .fmt-arrow-right {
+    font-size: 18px;
+    color: #4b5563;
+    flex: 0 0 auto;
+  }
+
+  .fmt-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 0;
+    flex-wrap: wrap;
+  }
+  .fmt-tab {
+    padding: 8px 16px;
+    border: 1px solid #374151;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: #1a1f2e;
+    color: #9ca3af;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .fmt-tab:hover { background: #1f2937; color: #d1d5db; }
+  .fmt-tab.active {
+    background: #1e293b;
+    color: #93c5fd;
+    border-color: #3b82f6;
+    font-weight: 600;
+  }
+
+  .fmt-tab-content {
+    display: none;
+    background: #1e293b;
+    border: 1px solid #374151;
+    border-radius: 0 8px 8px 8px;
+    padding: 16px;
+  }
+  .fmt-tab-content.active { display: block; }
+
+  .fmt-tab-header { margin-bottom: 12px; }
+  .fmt-tab-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e0e6f0;
+    margin-bottom: 4px;
+  }
+  .fmt-tab-principle {
+    font-size: 11.5px;
+    color: #9ca3af;
+    line-height: 1.5;
+    padding: 8px 12px;
+    background: #111827;
+    border-radius: 6px;
+    border-left: 3px solid #3b82f6;
+  }
+
+  .fmt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    margin-top: 8px;
+  }
+  .fmt-table th {
+    background: #111827;
+    color: #9ca3af;
+    font-weight: 600;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #374151;
+    white-space: nowrap;
+  }
+  .fmt-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #1f2937;
+    color: #d1d5db;
+    vertical-align: middle;
+  }
+  .fmt-table tr:hover td { background: rgba(59,130,246,0.06); }
+  .fmt-table code {
+    background: #0d1117;
+    color: #fbbf24;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+  }
+  .fmt-table .mono {
+    font-family: 'Courier New', monospace;
+    font-size: 10.5px;
+    color: #a5b4fc;
+    letter-spacing: -0.3px;
+  }
+  .fmt-table .conv { color: #9ca3af; }
+  .fmt-table .conv .out {
+    color: #60a5fa;
+    font-weight: 700;
+  }
+  .fmt-table .hl-row td {
+    background: rgba(59,130,246,0.08);
+  }
+  .default-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    background: #065f46;
+    color: #6ee7b7;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  .yuv-formula {
+    margin-top: 12px;
+    padding: 14px 16px;
+    background: #111827;
+    border-radius: 8px;
+    border: 1px solid #1e3a3a;
+  }
+  .yuv-formula-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #14b8a6;
+    margin-bottom: 8px;
+  }
+  .yuv-formula-body {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    color: #a5f3fc;
+    line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>IDS BPPMODE 数据通路全景动画</h1>
+  <p>EA6530 Display Subsystem — Framebuffer → Overlay Controller → FIFO → Display Controller</p>
+</div>
+
+<div class="controls">
+  <button id="btn-auto" class="active" onclick="toggleAuto()">▶ 自动播放</button>
+  <button onclick="stepPrev()">◀ 上一步</button>
+  <button onclick="stepNext()">下一步 ▶</button>
+  <button onclick="resetAnim()">↺ 重置</button>
+</div>
+
+<div class="step-info">
+  <div class="step-title" id="step-title">准备就绪</div>
+  <div class="step-desc" id="step-desc">点击「自动播放」或「下一步」开始</div>
+</div>
+
+<div class="canvas-wrap">
+<svg id="mainSvg" width="960" height="620" viewBox="0 0 960 620">
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+    <marker id="arrowhead-glow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#60a5fa"/>
+    </marker>
+    <marker id="arrowhead-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#10b981"/>
+    </marker>
+    <linearGradient id="fifoGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.1"/>
+    </linearGradient>
+    <filter id="glow-blue-f">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ======================== DDR 内存区域 ======================== -->
+  <rect class="mod-ddr" x="30" y="20" width="900" height="140"/>
+  <text class="label-title" x="480" y="42">DDR 内存 (Framebuffer)</text>
+
+  <!-- fb0 -->
+  <rect class="mod-fb0" x="80" y="58" width="340" height="88" id="box-fb0"/>
+  <text class="label" x="250" y="78">Overlay0 Framebuffer (fb0)</text>
+  <text class="label-sm" x="250" y="98">当前格式: <tspan fill="#14b8a6" font-weight="700" id="fb0-fmt">NV12 (YUV420SP)</tspan></text>
+  <text class="label-xs" x="250" y="116">Y平面 + UV交错平面</text>
+  <text class="label-xs" x="250" y="130" fill="#14b8a6">视频数据</text>
+
+  <!-- fb1 -->
+  <rect class="mod-fb1" x="540" y="58" width="340" height="88" id="box-fb1"/>
+  <text class="label" x="710" y="78">Overlay1 Framebuffer (fb1)</text>
+  <text class="label-sm" x="710" y="98">当前格式: <tspan fill="#c084fc" font-weight="700" id="fb1-fmt">ARGB8888</tspan></text>
+  <text class="label-xs" x="710" y="116">[AAAAAAAA][RRRRRRRR][GGGGGGGG][BBBBBBBB]</text>
+  <text class="label-xs" x="710" y="130" fill="#c084fc">OSD 图层数据</text>
+
+  <!-- ======================== DMA 箭头 ======================== -->
+  <line class="arrow-line" x1="250" y1="146" x2="250" y2="200" id="arrow-dma0"/>
+  <text class="label-xs" x="270" y="176" id="lbl-dma0">DMA 读取</text>
+
+  <line class="arrow-line" x1="710" y1="146" x2="710" y2="200" id="arrow-dma1"/>
+  <text class="label-xs" x="730" y="176" id="lbl-dma1">DMA 读取</text>
+
+  <!-- ======================== Overlay Controller ======================== -->
+  <rect class="mod-ovc" x="30" y="200" width="900" height="220" id="box-ovc"/>
+  <text class="label-title" x="480" y="222">Overlay Controller (0x1000 ~ 0x1800)</text>
+
+  <!-- BPPMODE 解码器 0 -->
+  <rect class="mod-bpp0" x="100" y="240" width="300" height="80" id="box-bpp0"/>
+  <text class="label" x="250" y="260">① BPPMODE 格式解码</text>
+  <text class="label-reg" x="250" y="280" id="bpp0-reg">OVCW0CR.BPPMODE = NV12</text>
+  <text class="label-addr" x="250" y="296">寄存器地址: 0x1080  bit[5:1]</text>
+  <text class="label-xs" x="250" y="312" fill="#38bdf8">→ 硬件 YUV→RGB 矩阵转换为 24-bit RGB</text>
+
+  <!-- BPPMODE 解码器 1 -->
+  <rect class="mod-bpp1" x="560" y="240" width="300" height="80" id="box-bpp1"/>
+  <text class="label" x="710" y="260">① BPPMODE 格式解码</text>
+  <text class="label-reg" x="710" y="280" id="bpp1-reg">OVCW1CR.BPPMODE = 8A888</text>
+  <text class="label-addr" x="710" y="296">寄存器地址: 0x1100  bit[5:1]</text>
+  <text class="label-xs" x="710" y="312" fill="#c084fc">→ 取 R8G8B8, Alpha 用于 blending</text>
+
+  <!-- 解码输出箭头 -->
+  <line class="arrow-line" x1="250" y1="320" x2="250" y2="345" id="arrow-dec0"/>
+  <text class="label-xs" x="210" y="338" fill="#3b82f6" id="lbl-dec0">24-bit RGB</text>
+
+  <line class="arrow-line" x1="710" y1="320" x2="710" y2="345" id="arrow-dec1"/>
+  <text class="label-xs" x="750" y="338" fill="#3b82f6" id="lbl-dec1">24-bit RGB</text>
+
+  <!-- Alpha 混合 -->
+  <rect class="mod-blend" x="300" y="345" width="360" height="55" id="box-blend"/>
+  <text class="label" x="480" y="365">② Alpha 混合</text>
+  <text class="label-sm" x="480" y="383">Output = W1 × Alpha + W0 × (1 - Alpha)</text>
+  <text class="label-xs" x="480" y="396" fill="#f59e0b">结果 = 24-bit RGB</text>
+
+  <!-- 汇入混合器的箭头 -->
+  <path class="arrow-line" d="M250,345 L250,365 Q250,372 300,372" id="arrow-to-blend0"/>
+  <path class="arrow-line" d="M710,345 L710,365 Q710,372 660,372" id="arrow-to-blend1"/>
+
+  <!-- ======================== FIFO ======================== -->
+  <line class="arrow-line" x1="480" y1="400" x2="480" y2="438" id="arrow-to-fifo"/>
+  <text class="label-xs" x="510" y="424" fill="#8b5cf6" id="lbl-to-fifo">24-bit RGB</text>
+
+  <rect class="mod-fifo" x="340" y="438" width="280" height="48" id="box-fifo" fill="url(#fifoGrad)" stroke="#8b5cf6"/>
+  <text class="label" x="480" y="457" fill="#c4b5fd">2K-depth FIFO</text>
+  <text class="label-xs" x="480" y="473" fill="#8b5cf6">24-bit RGB 缓冲 · 解耦时钟域</text>
+
+  <!-- FIFO slots visualization -->
+  <g id="fifo-slots" opacity="0.5">
+    <rect x="355" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="366" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="377" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="388" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="399" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="410" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="421" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="432" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="443" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="454" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="465" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="476" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="487" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="498" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="509" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="520" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="531" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="542" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="553" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="564" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="575" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="586" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+    <rect x="597" y="443" width="8" height="18" rx="1" fill="#3b82f6" opacity="0.3"/>
+  </g>
+
+  <!-- ======================== Display Controller ======================== -->
+  <line class="arrow-line" x1="480" y1="486" x2="480" y2="510" id="arrow-to-dispc"/>
+  <text class="label-xs" x="510" y="502" fill="#10b981" id="lbl-to-dispc">逐像素取出</text>
+
+  <rect class="mod-dispc" x="30" y="510" width="900" height="90" id="box-dispc"/>
+  <text class="label-title" x="480" y="532" fill="#6ee7b7">Display Controller (0x000 ~ 0x05c)</text>
+  <text class="label-sm" x="480" y="552">从 FIFO 逐像素取出 24-bit RGB · 配合 VSYNC/HSYNC/VCLK/VDEN 时序信号</text>
+  <text class="label-xs" x="480" y="570" fill="#10b981">⚠ 完全不知道原始 framebuffer 的格式 — 只看到标准 24-bit RGB</text>
+  <text class="label-addr" x="480" y="586">LCDCON1~6 (0x000~0x018) 只配置时序参数，无 BPPMODE 字段</text>
+
+  <!-- ======================== 输出设备 ======================== -->
+  <line class="arrow-line" x1="300" y1="600" x2="300" y2="612" id="arrow-to-lcd" stroke="#10b981" marker-end="url(#arrowhead-green)"/>
+  <line class="arrow-line" x1="660" y1="600" x2="660" y2="612" id="arrow-to-tv" stroke="#10b981" marker-end="url(#arrowhead-green)"/>
+
+  <!-- ======================== 数据包动画元素 ======================== -->
+  <!-- fb0 → bpp0 packets (NV12 cyan) -->
+  <circle class="packet packet-nv12" r="5" id="pkt-dma0-0"/>
+  <circle class="packet packet-nv12" r="5" id="pkt-dma0-1"/>
+  <circle class="packet packet-nv12" r="5" id="pkt-dma0-2"/>
+
+  <!-- fb1 → bpp1 packets (ARGB purple) -->
+  <circle class="packet packet-argb" r="5" id="pkt-dma1-0"/>
+  <circle class="packet packet-argb" r="5" id="pkt-dma1-1"/>
+  <circle class="packet packet-argb" r="5" id="pkt-dma1-2"/>
+
+  <!-- bpp0 → blend packets (RGB blue) -->
+  <circle class="packet packet-rgb" r="5" id="pkt-rgb0-0"/>
+  <circle class="packet packet-rgb" r="5" id="pkt-rgb0-1"/>
+
+  <!-- bpp1 → blend packets (RGB blue) -->
+  <circle class="packet packet-rgb" r="5" id="pkt-rgb1-0"/>
+  <circle class="packet packet-rgb" r="5" id="pkt-rgb1-1"/>
+
+  <!-- blend → fifo packets (RGB24 bright blue) -->
+  <circle class="packet packet-rgb24" r="5" id="pkt-fifo-0"/>
+  <circle class="packet packet-rgb24" r="5" id="pkt-fifo-1"/>
+
+  <!-- fifo → dispc packets (green) -->
+  <circle class="packet packet-out" r="5" id="pkt-out-0"/>
+  <circle class="packet packet-out" r="5" id="pkt-out-1"/>
+
+  <!-- Highlight overlays for active step -->
+  <rect x="100" y="240" width="300" height="80" rx="6" fill="none" stroke="#38bdf8" stroke-width="2.5" opacity="0" id="hl-bpp0">
+    <animate attributeName="opacity" values="0;0.8;0" dur="1.5s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="560" y="240" width="300" height="80" rx="6" fill="none" stroke="#c084fc" stroke-width="2.5" opacity="0" id="hl-bpp1">
+    <animate attributeName="opacity" values="0;0.8;0" dur="1.5s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="300" y="345" width="360" height="55" rx="6" fill="none" stroke="#f59e0b" stroke-width="2.5" opacity="0" id="hl-blend">
+    <animate attributeName="opacity" values="0;0.8;0" dur="1.5s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="340" y="438" width="280" height="48" rx="8" fill="none" stroke="#8b5cf6" stroke-width="2.5" opacity="0" id="hl-fifo">
+    <animate attributeName="opacity" values="0;0.8;0" dur="1.5s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="30" y="510" width="900" height="90" rx="10" fill="none" stroke="#10b981" stroke-width="2.5" opacity="0" id="hl-dispc">
+    <animate attributeName="opacity" values="0;0.8;0" dur="1.5s" repeatCount="indefinite"/>
+  </rect>
+</svg>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#14b8a6"></div>NV12 (YUV) 数据</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c084fc"></div>ARGB8888 数据</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>解码后 24-bit RGB</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>混合后 24-bit RGB</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>输出信号</div>
+</div>
+
+<!-- ==================== 格式转换详情面板 ==================== -->
+<div class="fmt-panel">
+  <div class="fmt-panel-header" onclick="toggleFmtPanel()">
+    <h2>Overlay Controller 格式转换完整清单 <span class="fmt-badge">21 种输入 → 统一 24-bit RGB 输出</span></h2>
+    <span class="fmt-toggle" id="fmt-toggle-icon">▼</span>
+  </div>
+  <div class="fmt-panel-body" id="fmt-panel-body">
+
+    <!-- 汇总图 -->
+    <div class="fmt-summary">
+      <div class="fmt-summary-row">
+        <div class="fmt-cat-card fmt-cat-pal">
+          <div class="fmt-cat-icon">📋</div>
+          <div class="fmt-cat-title">调色板查找</div>
+          <div class="fmt-cat-count">4 种格式</div>
+          <div class="fmt-cat-desc">像素值 → 查 Palette RAM</div>
+          <div class="fmt-cat-ids">BPPMODE 0~3</div>
+        </div>
+        <div class="fmt-arrow-right">→</div>
+        <div class="fmt-cat-card fmt-cat-expand">
+          <div class="fmt-cat-icon">🔍</div>
+          <div class="fmt-cat-title">低位扩展</div>
+          <div class="fmt-cat-count">10 种格式</div>
+          <div class="fmt-cat-desc">R/G/B 各分量扩展到 8 位</div>
+          <div class="fmt-cat-ids">BPPMODE 4~10,15,19,20</div>
+        </div>
+        <div class="fmt-arrow-right">→</div>
+        <div class="fmt-cat-card fmt-cat-direct">
+          <div class="fmt-cat-icon">📦</div>
+          <div class="fmt-cat-title">直接提取</div>
+          <div class="fmt-cat-count">6 种格式</div>
+          <div class="fmt-cat-desc">R/G/B 已是 7~8 位，直接取出</div>
+          <div class="fmt-cat-ids">BPPMODE 11~14,16,18</div>
+        </div>
+        <div class="fmt-arrow-right">→</div>
+        <div class="fmt-cat-card fmt-cat-yuv">
+          <div class="fmt-cat-icon">🎨</div>
+          <div class="fmt-cat-title">色彩空间转换</div>
+          <div class="fmt-cat-count">1 种格式</div>
+          <div class="fmt-cat-desc">硬件 YUV→RGB 矩阵运算</div>
+          <div class="fmt-cat-ids">BPPMODE 17</div>
+        </div>
+        <div class="fmt-arrow-right">=</div>
+        <div class="fmt-cat-card fmt-cat-output">
+          <div class="fmt-cat-icon">✅</div>
+          <div class="fmt-cat-title">统一输出</div>
+          <div class="fmt-cat-count">24-bit</div>
+          <div class="fmt-cat-desc">R8 G8 B8</div>
+          <div class="fmt-cat-ids">送入 FIFO</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 导航 -->
+    <div class="fmt-tabs">
+      <button class="fmt-tab active" data-tab="palette" onclick="switchTab('palette')">📋 调色板查找 (4)</button>
+      <button class="fmt-tab" data-tab="expand" onclick="switchTab('expand')">🔍 低位扩展 (10)</button>
+      <button class="fmt-tab" data-tab="direct" onclick="switchTab('direct')">📦 直接提取 (6)</button>
+      <button class="fmt-tab" data-tab="yuv" onclick="switchTab('yuv')">🎨 色彩空间转换 (1)</button>
+    </div>
+
+    <!-- Tab 内容 -->
+    <div class="fmt-tab-content active" id="tab-palette">
+      <div class="fmt-tab-header">
+        <div class="fmt-tab-title">调色板查找型 (Palette Lookup)</div>
+        <div class="fmt-tab-principle">原理：像素值本身不是颜色，而是调色板 RAM 的索引号。硬件用索引查表得到 R8G8B8。</div>
+      </div>
+      <table class="fmt-table">
+        <thead><tr><th>BPPMODE</th><th>枚举值</th><th>格式名称</th><th>每像素</th><th>颜色数</th><th>内存布局</th><th>转换方式</th></tr></thead>
+        <tbody>
+          <tr><td><code>00000</code></td><td>0</td><td>1BPP Palette</td><td>1 bit</td><td>2</td><td class="mono">每 bit 一个像素索引</td><td class="conv">索引 → 查 Palette RAM → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>00001</code></td><td>1</td><td>2BPP Palette</td><td>2 bit</td><td>4</td><td class="mono">每 2bit 一个像素索引</td><td class="conv">索引 → 查 Palette RAM → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>00010</code></td><td>2</td><td>4BPP Palette</td><td>4 bit</td><td>16</td><td class="mono">每半字节一个像素索引</td><td class="conv">索引 → 查 Palette RAM → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>00011</code></td><td>3</td><td>8BPP Palette</td><td>8 bit</td><td>256</td><td class="mono">每字节一个像素索引</td><td class="conv">索引 → 查 Palette RAM → <span class="out">R8G8B8</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="fmt-tab-content" id="tab-expand">
+      <div class="fmt-tab-header">
+        <div class="fmt-tab-title">低位数 RGB 扩展型 (Bit Expansion)</div>
+        <div class="fmt-tab-principle">原理：R/G/B 各分量位数不足 8 位，硬件将低位数扩展到 8 位（MSB 复制填充 LSB）。带 Alpha 的格式，Alpha 用于 blending。</div>
+      </div>
+      <table class="fmt-table">
+        <thead><tr><th>BPPMODE</th><th>枚举值</th><th>格式名称</th><th>每像素</th><th>内存布局</th><th>转换方式</th></tr></thead>
+        <tbody>
+          <tr><td><code>00100</code></td><td>4</td><td>8BPP 1A232</td><td>8 bit</td><td class="mono">[A][RR][GGG][BB]</td><td class="conv">R2→8, G3→8, B2→8 + 1bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr class="hl-row"><td><code>00101</code></td><td>5</td><td><strong>16BPP R5G6B5</strong></td><td>16 bit</td><td class="mono">[RRRRRGGG][GGGBBBBB]</td><td class="conv">R5→8, G6→8, B5→8 → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>00110</code></td><td>6</td><td>16BPP 1A555</td><td>16 bit</td><td class="mono">[ARRRRRGG][GGGBBBBB]</td><td class="conv">R5→8, G5→8, B5→8 + 1bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>00111</code></td><td>7</td><td>16BPP I555</td><td>16 bit</td><td class="mono">[IRRRRRGG][GGGBBBBB]</td><td class="conv">R5→8, G5→8, B5→8 + I=AEN索引 → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>01000</code></td><td>8</td><td>18BPP R6G6B6</td><td>18 bit</td><td class="mono">[RRRRRRGG][GGGGBBBB][BB......]</td><td class="conv">R6→8, G6→8, B6→8 → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>01001</code></td><td>9</td><td>18BPP 1A665</td><td>18 bit</td><td class="mono">[ARRRRRR][GGGGGGBB][BBB.....]</td><td class="conv">R6→8, G6→8, B5→8 + 1bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>01010</code></td><td>10</td><td>19BPP 1A666</td><td>19 bit</td><td class="mono">[ARRRRRR][GGGGGGBB][BBBB....]</td><td class="conv">R6→8, G6→8, B6→8 + 1bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>01111</code></td><td>15</td><td>16BPP 4A444</td><td>16 bit</td><td class="mono">[AAAARRRR][GGGGBBBB]</td><td class="conv">R4→8, G4→8, B4→8 + 4bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>10011</code></td><td>19</td><td>16BPP 555A</td><td>16 bit</td><td class="mono">[RRRRRGGG][GGBBBBBA]</td><td class="conv">R5→8, G5→8, B5→8 + 1bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>10100</code></td><td>20</td><td>16BPP 555I</td><td>16 bit</td><td class="mono">[RRRRRGGG][GGBBBBBI]</td><td class="conv">R5→8, G5→8, B5→8 + I=AEN索引 → <span class="out">R8G8B8</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="fmt-tab-content" id="tab-direct">
+      <div class="fmt-tab-header">
+        <div class="fmt-tab-title">高位数 RGB 直接提取型 (Direct Extract)</div>
+        <div class="fmt-tab-principle">原理：R/G/B 各分量已是 7~8 位，硬件直接取出或微调即可得到 R8G8B8。Alpha 部分供 blending 使用。</div>
+      </div>
+      <table class="fmt-table">
+        <thead><tr><th>BPPMODE</th><th>枚举值</th><th>格式名称</th><th>每像素</th><th>内存布局</th><th>转换方式</th></tr></thead>
+        <tbody>
+          <tr><td><code>01011</code></td><td>11</td><td>24BPP R8G8B8</td><td>24 bit (占32)</td><td class="mono">[xxxxxxxx][RRRRRRRR][GGGGGGGG][BBBBBBBB]</td><td class="conv">直接取 R8G8B8 → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>01100</code></td><td>12</td><td>24BPP 1A887</td><td>24 bit (占32)</td><td class="mono">[ARRRRRRRR][GGGGGGGG][BBBBBBB.]</td><td class="conv">R8, G8, B7→8 + 1bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>01101</code></td><td>13</td><td>25BPP 1A888</td><td>25 bit (占32)</td><td class="mono">[ARRRRRRRR][GGGGGGGG][BBBBBBBB]</td><td class="conv">直接取 R8G8B8 + 1bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr><td><code>01110</code></td><td>14</td><td>28BPP 4A888</td><td>28 bit (占32)</td><td class="mono">[AAAARRRR][RRRRGGGG][GGGGBBBB][BBBB....]</td><td class="conv">直接取 R8G8B8 + 4bit Alpha → <span class="out">R8G8B8</span></td></tr>
+          <tr class="hl-row"><td><code>10000</code></td><td>16</td><td><strong>32BPP 8A888 (ARGB8888)</strong></td><td>32 bit</td><td class="mono">[AAAAAAAA][RRRRRRRR][GGGGGGGG][BBBBBBBB]</td><td class="conv">直接取 R8G8B8 + 8bit Alpha → <span class="out">R8G8B8</span> <span class="default-tag">默认</span></td></tr>
+          <tr class="hl-row"><td><code>10010</code></td><td>18</td><td><strong>32BPP 888A (RGBA8888)</strong></td><td>32 bit</td><td class="mono">[RRRRRRRR][GGGGGGGG][BBBBBBBB][AAAAAAAA]</td><td class="conv">直接取 R8G8B8 + 8bit Alpha → <span class="out">R8G8B8</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="fmt-tab-content" id="tab-yuv">
+      <div class="fmt-tab-header">
+        <div class="fmt-tab-title">YUV 色彩空间转换型 (Color Space Conversion)</div>
+        <div class="fmt-tab-principle">原理：像素数据是 YUV 格式，硬件通过内置的 YUV→RGB 矩阵运算实时转换为 R8G8B8。</div>
+      </div>
+      <table class="fmt-table">
+        <thead><tr><th>BPPMODE</th><th>枚举值</th><th>格式名称</th><th>内存布局</th><th>转换方式</th></tr></thead>
+        <tbody>
+          <tr class="hl-row"><td><code>10001</code></td><td>17</td><td><strong>YUV420SP (NV12)</strong></td><td class="mono">Y平面: [YYYY...] + UV交错平面: [UVUV...]</td><td class="conv">硬件矩阵运算 → <span class="out">R8G8B8</span></td></tr>
+        </tbody>
+      </table>
+      <div class="yuv-formula">
+        <div class="yuv-formula-title">YUV→RGB 转换公式（硬件矩阵实现）</div>
+        <div class="yuv-formula-body">
+          <div>R = Y + 1.402 × (V - 128)</div>
+          <div>G = Y - 0.344 × (U - 128) - 0.714 × (V - 128)</div>
+          <div>B = Y + 1.772 × (U - 128)</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const steps = [
+  {
+    title: '第 1 步：DMA 从 DDR 读取 Framebuffer',
+    desc: 'Overlay Controller 的 DMA 引擎分别从 fb0 和 fb1 对应的 DDR 内存区域读取原始像素数据',
+    action: 'dma_read'
+  },
+  {
+    title: '第 2 步：BPPMODE 独立解码（核心！）',
+    desc: 'Overlay0 的 OVCW0CR (0x1080) 和 Overlay1 的 OVCW1CR (0x1100) 各自独立配置 BPPMODE，各自解码为 24-bit RGB',
+    action: 'bpp_decode'
+  },
+  {
+    title: '第 3 步：Alpha 混合',
+    desc: '两个 Window 解码后的 24-bit RGB 在 Overlay Controller 内部按 Alpha 系数混合，输出单一 24-bit RGB 流',
+    action: 'alpha_blend'
+  },
+  {
+    title: '第 4 步：写入 2K FIFO',
+    desc: '混合后的 24-bit 纯 RGB 数据写入 FIFO，解耦 Overlay Controller 和 Display Controller 的时钟域',
+    action: 'write_fifo'
+  },
+  {
+    title: '第 5 步：Display Controller 逐像素输出',
+    desc: 'Display Controller 从 FIFO 按 VCLK 节拍逐像素取出 24-bit RGB，配合时序信号发送 — 完全不知道原始格式！',
+    action: 'output'
+  }
+];
+
+let currentStep = -1;
+let autoPlay = true;
+let autoTimer = null;
+let animating = false;
+
+function clearHighlights() {
+  ['hl-bpp0','hl-bpp1','hl-blend','hl-fifo','hl-dispc'].forEach(id => {
+    const el = document.getElementById(id);
+    el.style.display = 'none';
+  });
+  document.querySelectorAll('.packet').forEach(p => {
+    p.style.opacity = '0';
+    p.getAnimations().forEach(a => a.cancel());
+  });
+  document.querySelectorAll('.arrow-line-active').forEach(el => {
+    el.classList.remove('arrow-line-active');
+    el.classList.add('arrow-line');
+  });
+  const fifoSlots = document.getElementById('fifo-slots');
+  fifoSlots.querySelectorAll('rect').forEach(r => {
+    r.style.opacity = '0.3';
+    r.style.fill = '#3b82f6';
+  });
+}
+
+function activateArrow(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.classList.remove('arrow-line');
+    el.classList.add('arrow-line-active');
+    el.style.stroke = '#60a5fa';
+  }
+}
+
+function showHighlight(id) {
+  const el = document.getElementById(id);
+  el.style.display = '';
+}
+
+function animatePacket(id, x1, y1, x2, y2, delay, dur, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.opacity = '1';
+  el.style.fill = color;
+  el.setAttribute('cx', x1);
+  el.setAttribute('cy', y1);
+
+  const anim = el.animate([
+    { transform: `translate(0, 0)`, opacity: 0.3 },
+    { transform: `translate(0, 0)`, opacity: 1, offset: 0.1 },
+    { transform: `translate(${x2-x1}px, ${y2-y1}px)`, opacity: 1, offset: 0.85 },
+    { transform: `translate(${x2-x1}px, ${y2-y1}px)`, opacity: 0 }
+  ], {
+    duration: dur,
+    delay: delay,
+    easing: 'ease-in-out',
+    fill: 'forwards'
+  });
+  return anim;
+}
+
+function animatePacketPath(id, points, delay, dur, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.opacity = '1';
+  el.style.fill = color;
+  el.setAttribute('cx', points[0].x);
+  el.setAttribute('cy', points[0].y);
+
+  const keyframes = points.map((p, i) => ({
+    transform: `translate(${p.x - points[0].x}px, ${p.y - points[0].y}px)`,
+    opacity: i === 0 ? 0.3 : (i === points.length - 1 ? 0 : 1),
+    offset: i / (points.length - 1)
+  }));
+
+  return el.animate(keyframes, {
+    duration: dur,
+    delay: delay,
+    easing: 'ease-in-out',
+    fill: 'forwards'
+  });
+}
+
+function fillFifoSlots(delay) {
+  const slots = document.getElementById('fifo-slots').querySelectorAll('rect');
+  slots.forEach((s, i) => {
+    setTimeout(() => {
+      s.style.opacity = '0.9';
+      s.style.fill = '#60a5fa';
+      setTimeout(() => { s.style.opacity = '0.6'; }, 200);
+    }, delay + i * 60);
+  });
+}
+
+function drainFifoSlots(delay) {
+  const slots = document.getElementById('fifo-slots').querySelectorAll('rect');
+  slots.forEach((s, i) => {
+    setTimeout(() => {
+      s.style.fill = '#10b981';
+      s.style.opacity = '0.8';
+      setTimeout(() => { s.style.opacity = '0.3'; s.style.fill = '#3b82f6'; }, 300);
+    }, delay + i * 80);
+  });
+}
+
+async function runStep(step) {
+  animating = true;
+  clearHighlights();
+
+  document.getElementById('step-title').textContent = steps[step].title;
+  document.getElementById('step-desc').textContent = steps[step].desc;
+
+  const action = steps[step].action;
+
+  if (action === 'dma_read') {
+    activateArrow('arrow-dma0');
+    activateArrow('arrow-dma1');
+
+    for (let i = 0; i < 3; i++) {
+      animatePacket(`pkt-dma0-${i}`, 250, 150, 250, 240, i * 300, 800, '#14b8a6');
+      animatePacket(`pkt-dma1-${i}`, 710, 150, 710, 240, i * 300 + 150, 800, '#c084fc');
+    }
+    await sleep(1400);
+
+  } else if (action === 'bpp_decode') {
+    showHighlight('hl-bpp0');
+    showHighlight('hl-bpp1');
+    activateArrow('arrow-dma0');
+    activateArrow('arrow-dma1');
+
+    for (let i = 0; i < 3; i++) {
+      animatePacket(`pkt-dma0-${i}`, 250, 150, 250, 240, i * 250, 600, '#14b8a6');
+      animatePacket(`pkt-dma1-${i}`, 710, 150, 710, 240, i * 250 + 100, 600, '#c084fc');
+    }
+
+    await sleep(600);
+
+    activateArrow('arrow-dec0');
+    activateArrow('arrow-dec1');
+    animatePacket('pkt-rgb0-0', 250, 322, 250, 365, 0, 500, '#3b82f6');
+    animatePacket('pkt-rgb0-1', 250, 322, 250, 365, 300, 500, '#3b82f6');
+    animatePacket('pkt-rgb1-0', 710, 322, 710, 365, 100, 500, '#3b82f6');
+    animatePacket('pkt-rgb1-1', 710, 322, 710, 365, 400, 500, '#3b82f6');
+
+    await sleep(1200);
+
+  } else if (action === 'alpha_blend') {
+    showHighlight('hl-blend');
+    activateArrow('arrow-dec0');
+    activateArrow('arrow-dec1');
+
+    animatePacketPath('pkt-rgb0-0',
+      [{x:250,y:322},{x:250,y:348},{x:300,y:372}], 0, 700, '#3b82f6');
+    animatePacketPath('pkt-rgb0-1',
+      [{x:250,y:322},{x:250,y:348},{x:300,y:372}], 300, 700, '#3b82f6');
+    animatePacketPath('pkt-rgb1-0',
+      [{x:710,y:322},{x:710,y:348},{x:660,y:372}], 100, 700, '#3b82f6');
+    animatePacketPath('pkt-rgb1-1',
+      [{x:710,y:322},{x:710,y:348},{x:660,y:372}], 400, 700, '#3b82f6');
+
+    await sleep(1300);
+
+  } else if (action === 'write_fifo') {
+    showHighlight('hl-fifo');
+    activateArrow('arrow-to-fifo');
+
+    animatePacket('pkt-fifo-0', 480, 402, 480, 445, 0, 600, '#60a5fa');
+    animatePacket('pkt-fifo-1', 480, 402, 480, 445, 350, 600, '#60a5fa');
+
+    fillFifoSlots(200);
+    await sleep(1800);
+
+  } else if (action === 'output') {
+    showHighlight('hl-dispc');
+    activateArrow('arrow-to-dispc');
+
+    drainFifoSlots(0);
+
+    animatePacket('pkt-out-0', 480, 488, 480, 550, 300, 600, '#10b981');
+    animatePacket('pkt-out-1', 480, 488, 480, 550, 650, 600, '#10b981');
+
+    await sleep(2400);
+  }
+
+  animating = false;
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function stepNext() {
+  if (animating) return;
+  currentStep = (currentStep + 1) % steps.length;
+  await runStep(currentStep);
+}
+
+async function stepPrev() {
+  if (animating) return;
+  currentStep = currentStep <= 0 ? steps.length - 1 : currentStep - 1;
+  await runStep(currentStep);
+}
+
+function resetAnim() {
+  stopAuto();
+  currentStep = -1;
+  clearHighlights();
+  document.getElementById('step-title').textContent = '准备就绪';
+  document.getElementById('step-desc').textContent = '点击「自动播放」或「下一步」开始';
+}
+
+async function autoLoop() {
+  while (autoPlay) {
+    await stepNext();
+    if (!autoPlay) break;
+    await sleep(800);
+  }
+}
+
+function toggleAuto() {
+  const btn = document.getElementById('btn-auto');
+  if (autoPlay) {
+    stopAuto();
+  } else {
+    autoPlay = true;
+    btn.textContent = '⏸ 暂停';
+    btn.classList.add('active');
+    autoLoop();
+  }
+}
+
+function stopAuto() {
+  autoPlay = false;
+  const btn = document.getElementById('btn-auto');
+  btn.textContent = '▶ 自动播放';
+  btn.classList.remove('active');
+}
+
+function toggleFmtPanel() {
+  const body = document.getElementById('fmt-panel-body');
+  const icon = document.getElementById('fmt-toggle-icon');
+  body.classList.toggle('collapsed');
+  icon.classList.toggle('collapsed');
+}
+
+function switchTab(tabName) {
+  document.querySelectorAll('.fmt-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.fmt-tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.fmt-tab[data-tab="${tabName}"]`).classList.add('active');
+  document.getElementById(`tab-${tabName}`).classList.add('active');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  clearHighlights();
+  setTimeout(() => autoLoop(), 600);
+});
+</script>
+</body>
+</html>

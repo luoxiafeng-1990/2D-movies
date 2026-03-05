@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EA6530 IDS Alpha 混合机制动画演示</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #0f1117; color: #e0e0e0; overflow-x: hidden; }
+
+.header { text-align: center; padding: 30px 20px 10px; }
+.header h1 { font-size: 28px; color: #7eb8ff; margin-bottom: 8px; }
+.header p { font-size: 14px; color: #888; }
+
+.tabs { display: flex; justify-content: center; gap: 8px; padding: 20px; flex-wrap: wrap; }
+.tab { padding: 12px 24px; border: 2px solid #333; border-radius: 10px; cursor: pointer; font-size: 15px; transition: all 0.3s; background: #1a1d27; }
+.tab:hover { border-color: #555; }
+.tab.active { border-color: #7eb8ff; background: #1e2a3a; color: #7eb8ff; }
+
+.scene { display: none; padding: 20px; max-width: 1100px; margin: 0 auto; }
+.scene.active { display: block; }
+
+.scene-title { font-size: 20px; color: #7eb8ff; margin-bottom: 6px; text-align: center; }
+.scene-desc { font-size: 14px; color: #aaa; margin-bottom: 20px; text-align: center; line-height: 1.6; }
+
+.canvas-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
+canvas { border-radius: 12px; background: #181b24; }
+
+.controls { display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
+.control-group { display: flex; align-items: center; gap: 8px; background: #1a1d27; padding: 10px 16px; border-radius: 8px; border: 1px solid #2a2d37; }
+.control-group label { font-size: 13px; color: #aaa; white-space: nowrap; }
+.control-group input[type="range"] { width: 120px; accent-color: #7eb8ff; }
+.control-group .val { font-size: 14px; color: #7eb8ff; font-weight: bold; min-width: 28px; text-align: center; }
+.control-group select { background: #252830; color: #e0e0e0; border: 1px solid #444; padding: 4px 8px; border-radius: 4px; font-size: 13px; }
+
+.info-box { background: #1a1d27; border: 1px solid #2a2d37; border-radius: 10px; padding: 16px 20px; margin: 10px auto; max-width: 800px; }
+.info-box h3 { color: #7eb8ff; font-size: 15px; margin-bottom: 8px; }
+.info-box p, .info-box li { font-size: 13px; line-height: 1.8; color: #bbb; }
+.info-box ul { padding-left: 20px; }
+.info-box .highlight { color: #ffd666; font-weight: bold; }
+.info-box .green { color: #73d897; }
+.info-box .red { color: #ff7875; }
+
+.play-btn { padding: 10px 28px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; transition: all 0.3s; }
+.play-btn.primary { background: #1668dc; color: white; }
+.play-btn.primary:hover { background: #4090ff; }
+.play-btn.secondary { background: #2a2d37; color: #ccc; border: 1px solid #444; }
+.play-btn.secondary:hover { background: #353840; }
+
+.formula-bar { text-align: center; padding: 10px; font-size: 16px; color: #ffd666; font-family: monospace; background: #1e2030; border-radius: 8px; margin: 10px auto; max-width: 700px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>EA6530 IDS Alpha 混合机制 动画演示</h1>
+  <p>基于芯片手册第31章 Display Subsystem — 三种混合模式可视化</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab(0)">模式一：Per-plane 整面混合</div>
+  <div class="tab" onclick="switchTab(1)">模式二：AEN 二选一混合</div>
+  <div class="tab" onclick="switchTab(2)">模式三：Per-pixel 全精度</div>
+</div>
+
+<!-- Scene 0: Per-plane -->
+<div class="scene active" id="scene0">
+  <div class="scene-title">Per-plane Blending（BLD_PIX=0）</div>
+  <div class="scene-desc">整个 Window 1 的所有像素使用相同的 Alpha 值混合<br>拖动滑块改变 Alpha，观察前景窗口的透明度变化</div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Alpha 值 (0~15)：</label>
+      <input type="range" id="s0alpha" min="0" max="15" value="8" oninput="draw0()">
+      <span class="val" id="s0alphaVal">8</span>
+    </div>
+    <div class="control-group">
+      <label>选择：</label>
+      <select id="s0sel" onchange="draw0()">
+        <option value="0">ALPHA_SEL=0 (用 ALPHA0)</option>
+        <option value="1">ALPHA_SEL=1 (用 ALPHA1)</option>
+      </select>
+    </div>
+  </div>
+  <div class="formula-bar" id="s0formula">最终颜色 = (8/15) × 前景 + (7/15) × 背景</div>
+  <div class="canvas-wrap"><canvas id="c0" width="900" height="380"></canvas></div>
+  <div class="info-box">
+    <h3>Per-plane 模式要点</h3>
+    <ul>
+      <li>BLD_PIX=0：所有像素使用<span class="highlight">同一个 Alpha 值</span></li>
+      <li>ALPHA_SEL 选择使用 ALPHA0 还是 ALPHA1 寄存器组</li>
+      <li>Alpha=0 时 Window 1 完全<span class="green">透明</span>（只看到背景）</li>
+      <li>Alpha=15 时 Window 1 完全<span class="red">不透明</span>（覆盖背景）</li>
+      <li>适合简单的半透明 OSD 叠加场景</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Scene 1: AEN -->
+<div class="scene" id="scene1">
+  <div class="scene-title">Per-pixel + AEN 选择（BLD_PIX=1, ALPHA_SEL=0）</div>
+  <div class="scene-desc">每个像素有 1-bit AEN 位，选择使用 ALPHA0（透明）或 ALPHA1（不透明）<br>点击"播放动画"观察文字叠加效果</div>
+  <div class="controls">
+    <div class="control-group">
+      <label>ALPHA0 (AEN=0 时)：</label>
+      <input type="range" id="s1a0" min="0" max="15" value="0" oninput="draw1()">
+      <span class="val" id="s1a0Val">0</span>
+    </div>
+    <div class="control-group">
+      <label>ALPHA1 (AEN=1 时)：</label>
+      <input type="range" id="s1a1" min="0" max="15" value="15" oninput="draw1()">
+      <span class="val" id="s1a1Val">15</span>
+    </div>
+    <div class="control-group">
+      <button class="play-btn primary" onclick="playAEN()">播放动画</button>
+    </div>
+  </div>
+  <div class="canvas-wrap"><canvas id="c1" width="900" height="420"></canvas></div>
+  <div class="info-box">
+    <h3>AEN 模式要点</h3>
+    <ul>
+      <li>BLD_PIX=1, ALPHA_SEL=0：每个像素的 <span class="highlight">AEN 位</span>在 ALPHA0 和 ALPHA1 之间选择</li>
+      <li>虽然叫"逐像素"，但每个像素只有<span class="highlight">两种透明度可选</span>（AEN 只有 1 bit）</li>
+      <li>典型用法：ALPHA0=0（完全透明），ALPHA1=15（完全不透明）</li>
+      <li>文字像素 AEN=1 → 不透明显示；空白像素 AEN=0 → 透明露出背景</li>
+      <li>支持的格式：25BPP(A1+RGB888)、19BPP(A1+RGB666)、16BPP(ARGB555) 等</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Scene 2: Per-pixel true alpha -->
+<div class="scene" id="scene2">
+  <div class="scene-title">Per-pixel 全精度 Alpha（BLD_PIX=1, ALPHA_SEL=1）</div>
+  <div class="scene-desc">每个像素拥有独立的 Alpha 值（28BPP: 4-bit / 32BPP: 8-bit）<br>点击"播放动画"观察圆形按钮边缘的渐变透明效果</div>
+  <div class="controls">
+    <div class="control-group">
+      <label>BPP 模式：</label>
+      <select id="s2bpp" onchange="draw2()">
+        <option value="4">28 BPP (4-bit Alpha, 16级)</option>
+        <option value="8">32 BPP (8-bit Alpha, 256级)</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <button class="play-btn primary" onclick="playPerPixel()">播放动画</button>
+    </div>
+  </div>
+  <div class="canvas-wrap"><canvas id="c2" width="900" height="420"></canvas></div>
+  <div class="info-box">
+    <h3>Per-pixel 全精度模式要点</h3>
+    <ul>
+      <li>BLD_PIX=1, ALPHA_SEL=1：Alpha 值<span class="highlight">直接从帧缓冲像素数据中读取</span></li>
+      <li>28BPP 模式：D[27:24] = 4-bit Alpha（16 级透明度）</li>
+      <li>32BPP 模式：D[31:24] = 8-bit Alpha（256 级透明度）</li>
+      <li>每个像素完全独立，可实现<span class="green">渐变透明、阴影、抗锯齿</span>等效果</li>
+      <li>内存开销最大，但视觉效果最好</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+function switchTab(idx) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('.scene').forEach((s, i) => s.classList.toggle('active', i === idx));
+  if (idx === 0) draw0();
+  if (idx === 1) draw1();
+  if (idx === 2) draw2();
+}
+
+function drawRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawCheckerboard(ctx, x, y, w, h, size) {
+  for (let r = 0; r < h; r += size) {
+    for (let c = 0; c < w; c += size) {
+      ctx.fillStyle = ((Math.floor(r / size) + Math.floor(c / size)) % 2 === 0) ? '#2a2d37' : '#353840';
+      ctx.fillRect(x + c, y + r, size, size);
+    }
+  }
+}
+
+function drawBgImage(ctx, x, y, w, h) {
+  const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+  grad.addColorStop(0, '#1a5276');
+  grad.addColorStop(0.3, '#1e8449');
+  grad.addColorStop(0.6, '#b7950b');
+  grad.addColorStop(1, '#922b21');
+  ctx.fillStyle = grad;
+  drawRoundRect(ctx, x, y, w, h, 8);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.font = '16px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText('Window 0 — 背景层（视频画面）', x + w / 2, y + h / 2 - 10);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  for (let i = 0; i < 6; i++) {
+    ctx.beginPath();
+    ctx.arc(x + 60 + i * 70, y + h / 2 + 20, 20 + i * 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ============ Scene 0: Per-plane ============
+function draw0() {
+  const canvas = document.getElementById('c0');
+  const ctx = canvas.getContext('2d');
+  const alpha = parseInt(document.getElementById('s0alpha').value);
+  const sel = document.getElementById('s0sel').value;
+  document.getElementById('s0alphaVal').textContent = alpha;
+
+  const a = alpha / 15;
+  const remain = 15 - alpha;
+  document.getElementById('s0formula').textContent =
+    `最终颜色 = (${alpha}/15) × 前景 + (${remain}/15) × 背景    [ALPHA_SEL=${sel} → 使用 ALPHA${sel}]`;
+
+  ctx.clearRect(0, 0, 900, 380);
+
+  // Background layer
+  drawBgImage(ctx, 30, 40, 400, 200);
+
+  // Arrow
+  ctx.fillStyle = '#555';
+  ctx.font = '28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('＋', 450, 145);
+
+  // Foreground layer
+  ctx.fillStyle = '#c0392b';
+  drawRoundRect(ctx, 480, 40, 400, 200, 8);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 22px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText('Window 1 — OSD 菜单', 680, 100);
+  ctx.font = '16px Microsoft YaHei';
+  ctx.fillText('▶ 播放    ⏸ 暂停    ⏹ 停止', 680, 140);
+  ctx.fillText('🔊 音量    ⚙ 设置', 680, 170);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillText(`Alpha = ${alpha}/15 (整面统一)`, 680, 210);
+
+  // Arrow down
+  ctx.fillStyle = '#555';
+  ctx.font = '28px sans-serif';
+  ctx.fillText('▼  混合结果  ▼', 450, 275);
+
+  // Result
+  drawBgImage(ctx, 130, 290, 280, 80);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = '#c0392b';
+  drawRoundRect(ctx, 280, 290, 240, 80, 6);
+  ctx.fill();
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.fillText('▶ 播放  ⏸ 暂停', 400, 325);
+  ctx.font = '12px Microsoft YaHei';
+  ctx.fillText('🔊 音量  ⚙ 设置', 400, 350);
+  ctx.globalAlpha = 1;
+
+  // Labels
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = '12px Microsoft YaHei';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Alpha=${alpha} → 透明度 ${Math.round((1 - a) * 100)}%`, 530, 340);
+
+  // Alpha bar visualization
+  ctx.fillStyle = '#1e2030';
+  ctx.fillRect(530, 350, 200, 16);
+  ctx.fillStyle = alpha === 0 ? '#73d897' : alpha === 15 ? '#ff7875' : '#ffd666';
+  ctx.fillRect(530, 350, (alpha / 15) * 200, 16);
+  ctx.fillStyle = '#fff';
+  ctx.font = '10px sans-serif';
+  ctx.fillText('0', 530, 378);
+  ctx.textAlign = 'right';
+  ctx.fillText('15', 730, 378);
+  ctx.textAlign = 'center';
+  ctx.fillText(alpha === 0 ? '完全透明' : alpha === 15 ? '完全不透明' : '半透明', 630, 378);
+}
+
+// ============ Scene 1: AEN ============
+let aenAnimId = null;
+let aenStep = 0;
+
+function draw1() {
+  const canvas = document.getElementById('c1');
+  const ctx = canvas.getContext('2d');
+  const a0 = parseInt(document.getElementById('s1a0').value);
+  const a1 = parseInt(document.getElementById('s1a1').value);
+  document.getElementById('s1a0Val').textContent = a0;
+  document.getElementById('s1a1Val').textContent = a1;
+
+  ctx.clearRect(0, 0, 900, 420);
+
+  const text = '播放';
+  const gridX = 80, gridY = 30;
+  const cellSize = 28;
+  const cols = 10, rows = 5;
+
+  // Title labels
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText('Window 1 像素数据', gridX + cols * cellSize / 2, gridY - 10);
+
+  // AEN grid
+  const aenMap = [
+    [0,0,1,1,1,1,0,0,0,0],
+    [0,1,1,0,0,1,1,0,0,0],
+    [0,1,1,1,1,1,1,0,0,0],
+    [0,1,1,0,0,1,1,0,0,0],
+    [0,0,1,1,1,1,0,0,0,0],
+  ];
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const aen = aenMap[r][c];
+      const x = gridX + c * cellSize;
+      const y = gridY + r * cellSize;
+      const alphaUsed = aen ? a1 : a0;
+      const opacity = alphaUsed / 15;
+
+      if (aenStep > 0) {
+        ctx.fillStyle = aen ? `rgba(231, 76, 60, ${Math.min(1, opacity + 0.2)})` : `rgba(100, 100, 100, 0.15)`;
+      } else {
+        ctx.fillStyle = aen ? '#e74c3c' : '#2a2d37';
+      }
+      ctx.fillRect(x, y, cellSize - 1, cellSize - 1);
+
+      ctx.fillStyle = aen ? '#fff' : '#555';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(aen ? '1' : '0', x + cellSize / 2, y + cellSize / 2 + 3);
+    }
+  }
+
+  // AEN label
+  ctx.fillStyle = '#aaa';
+  ctx.font = '12px Microsoft YaHei';
+  ctx.textAlign = 'left';
+  ctx.fillText('AEN=1 (红色) → 文字像素', gridX, gridY + rows * cellSize + 20);
+  ctx.fillText('AEN=0 (暗色) → 空白像素', gridX, gridY + rows * cellSize + 38);
+
+  // Arrow
+  ctx.fillStyle = '#555';
+  ctx.font = '24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('→', gridX + cols * cellSize + 20, gridY + rows * cellSize / 2);
+
+  // Background
+  const bgX = 380, bgY = 30, bgW = 240, bgH = 140;
+  drawBgImage(ctx, bgX, bgY, bgW, bgH);
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText('Window 0 背景', bgX + bgW / 2, bgY - 10);
+
+  // Arrow
+  ctx.fillStyle = '#555';
+  ctx.font = '24px sans-serif';
+  ctx.fillText('→', bgX + bgW + 20, bgY + bgH / 2);
+
+  // Result
+  const resX = 660, resY = 30, resW = 220, resH = 140;
+  drawBgImage(ctx, resX, resY, resW, resH);
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText('混合结果', resX + resW / 2, resY - 10);
+
+  // Draw blended text on result
+  const resCellW = resW / cols;
+  const resCellH = resH / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const aen = aenMap[r][c];
+      const alphaUsed = aen ? a1 : a0;
+      const opacity = alphaUsed / 15;
+      const x = resX + c * resCellW;
+      const y = resY + r * resCellH;
+
+      if (aenStep >= 2) {
+        ctx.fillStyle = `rgba(231, 76, 60, ${opacity})`;
+        ctx.fillRect(x, y, resCellW, resCellH);
+      }
+    }
+  }
+
+  // Explanation flow at bottom
+  const ey = 210;
+  ctx.fillStyle = '#1e2030';
+  ctx.fillRect(30, ey, 840, 200);
+  drawRoundRect(ctx, 30, ey, 840, 200, 8);
+  ctx.fillStyle = '#1a1d27';
+  ctx.fill();
+  ctx.strokeStyle = '#2a2d37';
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 15px Microsoft YaHei';
+  ctx.fillStyle = '#7eb8ff';
+  ctx.fillText('处理流程动画：', 50, ey + 28);
+
+  const steps = [
+    { text: '① 硬件逐像素读取帧缓冲，提取每个像素的 AEN 位', color: aenStep >= 0 ? '#ffd666' : '#555' },
+    { text: '② AEN=0 的像素 → 使用 ALPHA0=' + a0 + ' 混合（透明度 ' + Math.round((1 - a0/15)*100) + '%）', color: aenStep >= 1 ? '#73d897' : '#555' },
+    { text: '③ AEN=1 的像素 → 使用 ALPHA1=' + a1 + ' 混合（透明度 ' + Math.round((1 - a1/15)*100) + '%）', color: aenStep >= 1 ? '#ff7875' : '#555' },
+    { text: '④ 最终效果：文字区域(AEN=1)显示前景，空白区域(AEN=0)透出背景', color: aenStep >= 2 ? '#7eb8ff' : '#555' },
+  ];
+
+  steps.forEach((s, i) => {
+    ctx.fillStyle = s.color;
+    ctx.font = '14px Microsoft YaHei';
+    ctx.fillText(s.text, 50, ey + 60 + i * 30);
+
+    if (aenStep > i) {
+      ctx.fillStyle = '#73d897';
+      ctx.fillText(' ✓', 750, ey + 60 + i * 30);
+    }
+  });
+
+  // Register visualization
+  ctx.fillStyle = '#ffd666';
+  ctx.font = 'bold 13px monospace';
+  ctx.fillText(`OVCW1PCCR: ALPHA0_R/G/B = ${a0}/${a0}/${a0}    ALPHA1_R/G/B = ${a1}/${a1}/${a1}`, 50, ey + 190);
+}
+
+function playAEN() {
+  if (aenAnimId) { cancelAnimationFrame(aenAnimId); aenAnimId = null; }
+  aenStep = 0;
+  draw1();
+
+  let frame = 0;
+  function animate() {
+    frame++;
+    if (frame === 40) { aenStep = 1; draw1(); }
+    if (frame === 80) { aenStep = 2; draw1(); }
+    if (frame === 120) { aenStep = 3; draw1(); return; }
+    aenAnimId = requestAnimationFrame(animate);
+  }
+  aenAnimId = requestAnimationFrame(animate);
+}
+
+// ============ Scene 2: Per-pixel true alpha ============
+let ppAnimId = null;
+let ppProgress = 0;
+
+function draw2() {
+  const canvas = document.getElementById('c2');
+  const ctx = canvas.getContext('2d');
+  const bits = parseInt(document.getElementById('s2bpp').value);
+  const maxAlpha = bits === 4 ? 15 : 255;
+  const levels = bits === 4 ? 16 : 256;
+
+  ctx.clearRect(0, 0, 900, 420);
+
+  const cx = 200, cy = 160, radius = 100;
+
+  // Title
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Window 1 像素 Alpha 分布 (${bits === 4 ? '28BPP' : '32BPP'})`, cx, 20);
+
+  // Draw alpha distribution as a circle with gradient
+  for (let y = cy - radius - 10; y <= cy + radius + 10; y++) {
+    for (let x = cx - radius - 10; x <= cx + radius + 10; x += 2) {
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+      if (dist > radius + 8) continue;
+
+      let alphaVal;
+      if (dist <= radius - 15) {
+        alphaVal = maxAlpha;
+      } else if (dist <= radius + 5) {
+        const t = 1 - (dist - (radius - 15)) / 20;
+        alphaVal = Math.round(t * maxAlpha);
+        if (bits === 4) alphaVal = Math.round(alphaVal / 17) * 17;
+      } else {
+        alphaVal = 0;
+      }
+
+      if (ppProgress < 1) {
+        alphaVal = Math.round(alphaVal * ppProgress);
+      }
+
+      const opacity = alphaVal / maxAlpha;
+      ctx.fillStyle = `rgba(52, 152, 219, ${opacity})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+
+  // Alpha value labels
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(`α=${maxAlpha}`, cx, cy + 4);
+  ctx.fillStyle = '#aaa';
+  ctx.fillText(`α≈${Math.round(maxAlpha * 0.5)}`, cx + radius - 5, cy - radius + 25);
+  ctx.fillText('α=0', cx + radius + 15, cy);
+
+  // Color bar legend
+  ctx.fillStyle = '#aaa';
+  ctx.font = '12px Microsoft YaHei';
+  ctx.fillText('← 不透明    半透明    透明 →', cx, cy + radius + 30);
+
+  // Draw gradient bar
+  const barY = cy + radius + 40;
+  for (let i = 0; i < 200; i++) {
+    const a = 1 - i / 200;
+    ctx.fillStyle = `rgba(52, 152, 219, ${a})`;
+    ctx.fillRect(cx - 100 + i, barY, 1, 12);
+  }
+  ctx.fillStyle = '#888';
+  ctx.font = '10px monospace';
+  ctx.fillText(`${maxAlpha}`, cx - 100, barY + 24);
+  ctx.fillText('0', cx + 100, barY + 24);
+
+  // Arrow
+  ctx.fillStyle = '#555';
+  ctx.font = '28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('+', 370, 160);
+
+  // Background
+  drawBgImage(ctx, 420, 60, 200, 200);
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText('Window 0 背景', 520, 50);
+
+  // Arrow
+  ctx.fillStyle = '#555';
+  ctx.font = '28px sans-serif';
+  ctx.fillText('→', 640, 160);
+
+  // Result
+  const resX = 670, resY = 60, resW = 200, resH = 200;
+  drawBgImage(ctx, resX, resY, resW, resH);
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.textAlign = 'center';
+  ctx.fillText('混合结果', resX + resW / 2, 50);
+
+  const resCx = resX + resW / 2, resCy = resY + resH / 2;
+  for (let y = resCy - radius; y <= resCy + radius; y++) {
+    for (let x = resCx - radius; x <= resCx + radius; x += 2) {
+      const dist = Math.sqrt((x - resCx) ** 2 + (y - resCy) ** 2);
+      if (dist > radius + 8) continue;
+
+      let alphaVal;
+      if (dist <= radius - 15) {
+        alphaVal = maxAlpha;
+      } else if (dist <= radius + 5) {
+        const t = 1 - (dist - (radius - 15)) / 20;
+        alphaVal = Math.round(t * maxAlpha);
+        if (bits === 4) alphaVal = Math.round(alphaVal / 17) * 17;
+      } else {
+        alphaVal = 0;
+      }
+
+      if (ppProgress < 1) alphaVal = Math.round(alphaVal * ppProgress);
+
+      const opacity = alphaVal / maxAlpha;
+      ctx.fillStyle = `rgba(52, 152, 219, ${opacity})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+
+  // Memory layout
+  const memY = 300;
+  ctx.fillStyle = '#1a1d27';
+  drawRoundRect(ctx, 30, memY, 840, 110, 8);
+  ctx.fill();
+  ctx.strokeStyle = '#2a2d37';
+  ctx.stroke();
+
+  ctx.fillStyle = '#7eb8ff';
+  ctx.font = 'bold 14px Microsoft YaHei';
+  ctx.textAlign = 'left';
+  ctx.fillText(`帧缓冲内存布局 (${bits === 4 ? '28 BPP' : '32 BPP'})`, 50, memY + 24);
+
+  ctx.font = '13px monospace';
+  if (bits === 4) {
+    ctx.fillStyle = '#ffd666';
+    ctx.fillText('D[31:28]     D[27:24]     D[23:16]     D[15:8]      D[7:0]', 50, memY + 50);
+    ctx.fillStyle = '#888';
+    ctx.fillText('Dummy        Alpha(4bit)  Red(8bit)    Green(8bit)  Blue(8bit)', 50, memY + 70);
+    ctx.fillStyle = '#73d897';
+    ctx.fillText('             ↑', 50, memY + 90);
+    ctx.fillText('        每像素独立的 4-bit Alpha (0~15, 共 16 级透明度)', 50, memY + 90);
+  } else {
+    ctx.fillStyle = '#ffd666';
+    ctx.fillText('D[31:24]          D[23:16]     D[15:8]      D[7:0]', 50, memY + 50);
+    ctx.fillStyle = '#888';
+    ctx.fillText('Alpha(8bit)       Red(8bit)    Green(8bit)  Blue(8bit)', 50, memY + 70);
+    ctx.fillStyle = '#73d897';
+    ctx.fillText('↑', 50, memY + 90);
+    ctx.fillText('每像素独立的 8-bit Alpha (0~255, 共 256 级透明度)', 50, memY + 90);
+  }
+}
+
+function playPerPixel() {
+  if (ppAnimId) { cancelAnimationFrame(ppAnimId); ppAnimId = null; }
+  ppProgress = 0;
+
+  function animate() {
+    ppProgress += 0.012;
+    if (ppProgress > 1) ppProgress = 1;
+    draw2();
+    if (ppProgress < 1) {
+      ppAnimId = requestAnimationFrame(animate);
+    }
+  }
+  ppAnimId = requestAnimationFrame(animate);
+}
+
+// Init
+draw0();
+</script>
+</body>
+</html>

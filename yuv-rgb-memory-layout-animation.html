@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YUV / RGB 裸数据格式 — 书本翻页动画</title>
+<style>
+:root{
+  --y:#4fc3f7;--y-bg:rgba(79,195,247,.12);
+  --u:#66bb6a;--u-bg:rgba(102,187,106,.12);
+  --v:#ff8a65;--v-bg:rgba(255,138,101,.12);
+  --r:#ef5350;--g:#66bb6a;--b:#42a5f5;--a:#ab47bc;
+  --bg:#0d1017;--card:#151921;--border:#232836;
+  --text:#dce0e8;--dim:#6c7086;--accent:#7c4dff;
+  --spine:#3a2d66;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'SF Mono','Cascadia Code','Fira Code','JetBrains Mono',monospace;background:var(--bg);color:var(--text)}
+h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;background:linear-gradient(135deg,var(--y),var(--u),var(--v));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sub{text-align:center;color:var(--dim);font-size:13px;margin-bottom:16px}
+
+.tn{display:flex;justify-content:center;gap:4px;padding:0 12px;margin-bottom:16px;flex-wrap:wrap}
+.tb{padding:8px 14px;border:1px solid var(--border);background:var(--card);color:var(--dim);border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;transition:all .3s}
+.tb:hover{border-color:var(--accent);color:var(--text)}
+.tb.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tc{display:none}.tc.on{display:block}
+
+.sec{max-width:960px;margin:0 auto 20px;padding:0 16px}
+.cd{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:14px}
+.cd h2{font-size:16px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.bg{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.bg-p{background:rgba(79,195,247,.15);color:var(--y)}
+.bg-s{background:rgba(171,71,188,.15);color:var(--a)}
+.bg-k{background:rgba(255,138,101,.15);color:var(--v)}
+.ds{font-size:13px;color:var(--dim);line-height:1.7;margin:4px 0 10px}
+.ds strong{color:var(--text)}
+.lg{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:8px 0}
+.li{display:flex;align-items:center;gap:5px;font-size:12px}
+.ld{width:14px;height:14px;border-radius:3px}
+.ct{display:flex;gap:10px;justify-content:center;margin-top:12px;flex-wrap:wrap;align-items:center}
+.bt{padding:7px 16px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;transition:all .2s}
+.bt:hover{border-color:var(--accent);background:rgba(124,77,255,.08)}
+.bt.pr{background:var(--accent);border-color:var(--accent);color:#fff}
+.bt.pr:hover{background:#6a3de8}
+
+/* ===== BOOK ===== */
+.book-wrap{display:flex;justify-content:center;padding:10px 0}
+.book{display:flex;align-items:stretch}
+.spine{
+  width:52px;flex-shrink:0;z-index:10;position:relative;
+  background:linear-gradient(90deg,#16102a,#251d42 15%,#4a3b7a 50%,#3d2f66 85%,#2a204d);
+  border-radius:8px 0 0 8px;
+  box-shadow:5px 0 18px rgba(0,0,0,.6),inset -2px 0 6px rgba(255,255,255,.06);
+  display:flex;align-items:center;justify-content:center;
+  writing-mode:vertical-rl;text-orientation:mixed;
+  font-size:12px;color:rgba(200,180,255,.55);letter-spacing:3px;font-weight:700;
+  border-right:3px solid rgba(124,77,255,.3);
+}
+.spine::before{content:'';position:absolute;left:5px;top:6%;bottom:6%;width:4px;background:linear-gradient(180deg,transparent,rgba(255,255,255,.06),transparent);border-radius:3px}
+
+.pages-box{
+  position:relative;
+  overflow:visible;
+}
+
+.page{
+  position:absolute;left:0;top:0;
+  padding:14px 20px 14px 16px;
+  border-radius:0 10px 10px 0;
+  transition:box-shadow .5s ease;
+  border-left:4px solid var(--spine);
+}
+.page::before{content:'';position:absolute;left:0;top:0;bottom:0;width:14px;background:linear-gradient(90deg,rgba(0,0,0,.18),transparent);pointer-events:none;border-radius:0 0 0 0}
+
+.page-y{background:linear-gradient(135deg,#0d1a2a,#142640);border-color:var(--y);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-u{background:linear-gradient(135deg,#0d1f14,#14281c);border-color:var(--u);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-v{background:linear-gradient(135deg,#1f150d,#281c14);border-color:var(--v);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-uv{background:linear-gradient(135deg,#0d1f14,#1a1812);border-color:var(--u);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-vu{background:linear-gradient(135deg,#1f150d,#121a18);border-color:var(--v);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-pk{background:linear-gradient(135deg,#15131f,#1c1a28);border-color:var(--accent);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+
+.page.active-page{box-shadow:4px 6px 28px rgba(124,77,255,.3),0 0 20px rgba(124,77,255,.1) inset}
+.page.lifting{
+  filter:brightness(1.3) drop-shadow(0 8px 20px rgba(124,77,255,.3));
+  box-shadow:8px 12px 36px rgba(0,0,0,.6),0 0 24px rgba(124,77,255,.15) inset;
+}
+.page.sliding{
+  filter:brightness(.7);
+  box-shadow:2px 4px 12px rgba(0,0,0,.3);
+}
+.page.peeled{
+  opacity:0;
+  pointer-events:none;
+  filter:brightness(.3);
+}
+
+.page-edge{
+  position:absolute;right:-8px;top:2px;bottom:2px;width:8px;
+  border-radius:0 4px 4px 0;
+  box-shadow:3px 0 8px rgba(0,0,0,.35);
+}
+.page-bottom-edge{
+  position:absolute;left:2px;right:2px;bottom:-8px;height:8px;
+  border-radius:0 0 4px 4px;
+  box-shadow:0 3px 8px rgba(0,0,0,.35);
+}
+
+.page-tab{font-size:11px;font-weight:700;margin-bottom:8px;letter-spacing:.3px}
+.page-tab-y{color:var(--y)}.page-tab-u{color:var(--u)}.page-tab-v{color:var(--v)}
+.page-tab-uv{color:var(--u)}.page-tab-vu{color:var(--v)}.page-tab-pk{color:var(--accent)}
+
+.pg{display:grid;gap:3px}
+.pc{width:40px;height:40px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;transition:all .3s}
+.pc-y{background:var(--y);color:#000}.pc-u{background:var(--u);color:#000}.pc-v{background:var(--v);color:#000}
+.pc-r{background:var(--r);color:#fff}.pc-g{background:var(--g);color:#000}.pc-b{background:var(--b);color:#fff}.pc-a{background:var(--a);color:#fff}
+.pc.dim{opacity:.15;transform:scale(.8)}.pc.hl{box-shadow:0 0 10px 2px rgba(255,255,255,.5);transform:scale(1.1);z-index:10}
+
+/* ===== MEMORY BLOCKS ===== */
+.arr-d{text-align:center;padding:8px;color:var(--accent);font-size:14px;font-weight:600}
+.arr-d .ai{font-size:20px;display:inline-block;animation:bo 1.5s infinite}
+@keyframes bo{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+.ma-l{font-size:12px;color:var(--dim);margin-bottom:6px}
+.mbs{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
+.mb{border-radius:8px;padding:8px 10px}
+.mb-y{background:var(--y-bg);border:1.5px solid rgba(79,195,247,.3)}
+.mb-u{background:var(--u-bg);border:1.5px solid rgba(102,187,106,.3)}
+.mb-v{background:var(--v-bg);border:1.5px solid rgba(255,138,101,.3)}
+.mb-uv{background:linear-gradient(90deg,var(--u-bg),var(--v-bg));border:1.5px solid rgba(102,187,106,.3)}
+.mb-vu{background:linear-gradient(90deg,var(--v-bg),var(--u-bg));border:1.5px solid rgba(255,138,101,.3)}
+.mb-pk{background:rgba(124,77,255,.06);border:1.5px solid rgba(124,77,255,.2)}
+.mh{font-size:10px;font-weight:700;margin-bottom:5px;letter-spacing:.3px}
+.mh-y{color:var(--y)}.mh-u{color:var(--u)}.mh-v{color:var(--v)}.mh-uv{color:var(--u)}.mh-vu{color:var(--v)}.mh-pk{color:var(--accent)}
+.mg{display:flex;flex-wrap:wrap;gap:3px}
+.mc{width:32px;height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;opacity:0;transform:scale(.6);transition:all .3s cubic-bezier(.34,1.56,.64,1)}
+.mc.sh{opacity:1;transform:scale(1)}
+.mc.pp{animation:pp .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pp{0%{transform:scale(1.4);opacity:.5}100%{transform:scale(1);opacity:1}}
+.mc-y{background:var(--y);color:#000}.mc-u{background:var(--u);color:#000}.mc-v{background:var(--v);color:#000}
+.mc-r{background:var(--r);color:#fff}.mc-g{background:var(--g);color:#000}.mc-b{background:var(--b);color:#fff}.mc-a{background:var(--a);color:#fff}
+.m-ar{display:flex;align-items:center;color:var(--dim);font-size:16px;padding:0 2px;align-self:center}
+
+.fly{position:fixed;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;z-index:9999;pointer-events:none;transition:all .4s cubic-bezier(.4,0,.2,1)}
+.fly.dn{opacity:0;transform:scale(.2)}
+.st{text-align:center;font-size:12px;color:var(--accent);min-height:18px;margin-top:6px}
+
+/* ===== Comparison ===== */
+.cg{display:grid;grid-template-columns:1fr;gap:14px}
+.ci{border:1px solid var(--border);border-radius:8px;padding:14px}
+.ci h4{font-size:13px;margin-bottom:4px}
+
+/* ===== Flashcard ===== */
+.fg{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;perspective:1000px}
+.fc{height:155px;cursor:pointer;position:relative;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.34,1.56,.64,1)}.fc.fl{transform:rotateY(180deg)}
+.ff{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px;text-align:center}
+.f1{background:linear-gradient(135deg,#1e2030,#2a2d4a);border:2px solid var(--accent)}
+.f1 .fq{font-size:18px;font-weight:700;color:#fff;margin-bottom:4px}.f1 .fh{font-size:11px;color:var(--dim)}
+.f2{background:linear-gradient(135deg,#1a3a2a,#1e2030);border:2px solid var(--u);transform:rotateY(180deg)}
+.f2 .fa{font-size:12px;line-height:1.7}.f2 .fa strong{color:var(--y)}
+.f2 .fm{display:flex;gap:2px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+.f2 .fb{width:18px;height:18px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700}
+
+.mnb{min-height:150px;display:flex;flex-direction:column;gap:8px;padding:12px}
+.mnl{font-size:15px;font-weight:600;opacity:0;transform:translateX(-20px);transition:all .5s cubic-bezier(.34,1.56,.64,1);padding:6px 12px;border-radius:8px;border-left:4px solid transparent}
+.mnl.sh{opacity:1;transform:translateX(0)}.mnl.hl{background:rgba(124,77,255,.1);border-left-color:var(--accent)}
+
+.mtg{display:flex;gap:28px;justify-content:center;flex-wrap:wrap}
+.mtc{display:flex;flex-direction:column;gap:8px}
+.mti{padding:9px 16px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;transition:all .3s;text-align:center;min-width:155px}
+.mti:hover{border-color:var(--accent)}.mti.sel{border-color:var(--accent);background:rgba(124,77,255,.12)}
+.mti.ok{border-color:var(--u);background:rgba(129,199,132,.12);pointer-events:none}
+.mti.bad{border-color:var(--r);background:rgba(239,83,80,.12);animation:sk .5s}
+@keyframes sk{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+</style>
+</head>
+<body>
+<h1>YUV / RGB 内存布局 — 书本翻页动画</h1>
+<p class="sub">像翻书一样逐页查看数据平面，像素从每页飞到内存</p>
+
+<nav class="tn">
+  <button class="tb on" data-t="t0">YUV420P (I420)</button>
+  <button class="tb" data-t="t1">YV12</button>
+  <button class="tb" data-t="t2">NV12</button>
+  <button class="tb" data-t="t3">NV21</button>
+  <button class="tb" data-t="t4">YUYV (Packed)</button>
+  <button class="tb" data-t="t5">格式对比</button>
+  <button class="tb" data-t="t6">RGB 系列</button>
+  <button class="tb" data-t="t7">记忆闪卡</button>
+</nav>
+
+<div class="tc on" id="t0"><div class="sec"><div class="cd">
+  <h2><span class="bg bg-p">Planar</span> YUV420P / I420 — 三页书</h2>
+  <p class="ds">三个平面 = <strong>三页纸</strong>，堆叠在一起。翻开一页读取一页，逐页搬运到内存。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y 亮度</div><div class="li"><div class="ld" style="background:var(--u)"></div>U 色度</div><div class="li"><div class="ld" style="background:var(--v)"></div>V 色度</div></div>
+  <div id="s-yuv420p"></div>
+  <div class="st" id="st-yuv420p"></div>
+  <div class="ct"><button class="bt pr" onclick="play('yuv420p')">翻页播放</button><button class="bt" onclick="rst('yuv420p')">重置</button></div>
+</div></div></div>
+
+<div class="tc" id="t1"><div class="sec"><div class="cd">
+  <h2><span class="bg bg-p">Planar</span> YV12 — 三页书（V和U反了）</h2>
+  <p class="ds">同样三页，但搬运顺序是 Y → <strong>V</strong> → <strong>U</strong>，V 在 U 前面！</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y</div><div class="li"><div class="ld" style="background:var(--v)"></div>V 先</div><div class="li"><div class="ld" style="background:var(--u)"></div>U 后</div></div>
+  <div id="s-yv12"></div>
+  <div class="st" id="st-yv12"></div>
+  <div class="ct"><button class="bt pr" onclick="play('yv12')">翻页播放</button><button class="bt" onclick="rst('yv12')">重置</button></div>
+</div></div></div>
+
+<div class="tc" id="t2"><div class="sec"><div class="cd">
+  <h2><span class="bg bg-s">Semi-Planar</span> NV12 — 两页书</h2>
+  <p class="ds">只有 <strong>两页</strong>：第1页 Y 独立，第2页 U 和 V <strong>交错排列</strong>在同一页。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y 平面</div><div class="li"><div class="ld" style="background:linear-gradient(90deg,var(--u),var(--v))"></div>UV 交错</div></div>
+  <div id="s-nv12"></div>
+  <div class="st" id="st-nv12"></div>
+  <div class="ct"><button class="bt pr" onclick="play('nv12')">翻页播放</button><button class="bt" onclick="rst('nv12')">重置</button></div>
+</div></div></div>
+
+<div class="tc" id="t3"><div class="sec"><div class="cd">
+  <h2><span class="bg bg-s">Semi-Planar</span> NV21 — 两页书（VU顺序）</h2>
+  <p class="ds">和 NV12 一样两页，第2页里 <strong>V 在 U 前面</strong>（VUVU...）。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y 平面</div><div class="li"><div class="ld" style="background:linear-gradient(90deg,var(--v),var(--u))"></div>VU 交错</div></div>
+  <div id="s-nv21"></div>
+  <div class="st" id="st-nv21"></div>
+  <div class="ct"><button class="bt pr" onclick="play('nv21')">翻页播放</button><button class="bt" onclick="rst('nv21')">重置</button></div>
+</div></div></div>
+
+<div class="tc" id="t4"><div class="sec"><div class="cd">
+  <h2><span class="bg bg-k">Packed</span> YUYV — 一页纸</h2>
+  <p class="ds"><strong>只有1页！</strong>没有独立平面，Y/U/V 全部交错在一张纸上。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y</div><div class="li"><div class="ld" style="background:var(--u)"></div>U</div><div class="li"><div class="ld" style="background:var(--v)"></div>V</div></div>
+  <div id="s-yuyv"></div>
+  <div class="st" id="st-yuyv"></div>
+  <div class="ct"><button class="bt pr" onclick="play('yuyv')">播放搬运</button><button class="bt" onclick="rst('yuyv')">重置</button></div>
+</div></div></div>
+
+<div class="tc" id="t5"><div class="sec"><div class="cd">
+  <h2>三大 4:2:0 格式对比</h2>
+  <p class="ds">同一张图，三种格式写入内存，注意 UV 排列差异。</p>
+  <div class="ct" style="margin-bottom:10px"><button class="bt pr" onclick="playCmp()">同时播放</button><button class="bt" onclick="rstCmp()">重置</button></div>
+  <div class="cg" id="cmp"></div>
+</div></div></div>
+
+<div class="tc" id="t6"><div class="sec"><div class="cd">
+  <h2>RGB 格式</h2>
+  <p class="ds">RGB 只有 <strong>1 页</strong>，通道交错。对比不同通道顺序。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--r)"></div>R</div><div class="li"><div class="ld" style="background:var(--g)"></div>G</div><div class="li"><div class="ld" style="background:var(--b)"></div>B</div><div class="li"><div class="ld" style="background:var(--a)"></div>A</div></div>
+  <div id="rgb-b" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 0">
+    <button class="bt on" onclick="swR(this,'rgb24')">RGB24</button><button class="bt" onclick="swR(this,'bgr24')">BGR24</button><button class="bt" onclick="swR(this,'rgba32')">RGBA32</button><button class="bt" onclick="swR(this,'bgra32')">BGRA32</button><button class="bt" onclick="swR(this,'argb32')">ARGB32</button>
+  </div>
+  <div id="s-rgb"></div>
+  <div class="st" id="st-rgb"></div>
+  <div class="ct"><button class="bt pr" onclick="play('rgb')">播放搬运</button><button class="bt" onclick="rst('rgb')">重置</button></div>
+</div></div></div>
+
+<div class="tc" id="t7"><div class="sec">
+  <div class="cd"><h2>记忆闪卡</h2><div class="fg" id="fcg"></div><div class="ct" style="margin-top:10px"><button class="bt" onclick="fcP()">上一组</button><span id="fcp" style="font-size:11px;color:var(--dim);padding:0 8px"></span><button class="bt pr" onclick="fcN()">下一组</button><button class="bt" onclick="fcS()">打乱</button></div></div>
+  <div class="cd"><h2>记忆口诀</h2><div id="mn" class="mnb"></div><div class="ct"><button class="bt pr" onclick="mnP()">播放</button><button class="bt" onclick="mnR()">重置</button></div></div>
+  <div class="cd"><h2>连线测验</h2><p class="ds">点左侧格式名 → 点右侧内存描述</p><div class="mtg" id="mtg"></div><div class="ct" style="margin-top:8px"><button class="bt pr" onclick="mtR()">重新开始</button><span id="mts" style="font-size:11px;color:var(--dim);padding:0 8px"></span></div></div>
+</div></div>
+
+<script>
+/* Tabs */
+document.querySelectorAll('.tn .tb').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('.tn .tb').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tc').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById(b.dataset.t).classList.add('on');});});
+
+/* Data helpers */
+function yL(w,h){const a=[];for(let r=0;r<h;r++)for(let c=0;c<w;c++)a.push('Y'+(r*w+c));return a;}
+function uvL(ch,w,h){const a=[];for(let r=0;r<h/2;r++)for(let c=0;c<w/2;c++)a.push(ch+(r*(w/2)+c));return a;}
+
+/* Format definitions */
+const F={};
+F.yuv420p={
+  pages:[
+    {tab:'第1页 · Y 平面 (4×4)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {tab:'第2页 · U 平面 (2×2)',tcls:'page-tab-u',cls:'page-u',ecol:'var(--u)',cols:2,cells:uvL('U',4,4).map(t=>({t,c:'u'}))},
+    {tab:'第3页 · V 平面 (2×2)',tcls:'page-tab-v',cls:'page-v',ecol:'var(--v)',cols:2,cells:uvL('V',4,4).map(t=>({t,c:'v'}))},
+  ],
+  memB:[
+    {label:'Y 平面 · 16B',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {label:'U 平面 · 4B',hc:'mh-u',bc:'mb-u',cells:uvL('U',4,4).map(t=>({t,c:'u'}))},
+    {label:'V 平面 · 4B',hc:'mh-v',bc:'mb-v',cells:uvL('V',4,4).map(t=>({t,c:'v'}))},
+  ],
+  steps:[
+    {pi:0,bi:0,txt:'📖 翻开第1页 — 搬运 Y 平面',peel:true},
+    {pi:1,bi:1,txt:'📖 翻开第2页 — 搬运 U 平面',peel:true},
+    {pi:2,bi:2,txt:'📖 最后一页 — 搬运 V 平面',peel:false},
+  ],
+};
+F.yv12={
+  pages:[
+    {tab:'第1页 · Y 平面 (4×4)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {tab:'第2页 · V 平面 (2×2) ← 先!',tcls:'page-tab-v',cls:'page-v',ecol:'var(--v)',cols:2,cells:uvL('V',4,4).map(t=>({t,c:'v'}))},
+    {tab:'第3页 · U 平面 (2×2)',tcls:'page-tab-u',cls:'page-u',ecol:'var(--u)',cols:2,cells:uvL('U',4,4).map(t=>({t,c:'u'}))},
+  ],
+  memB:[
+    {label:'Y 平面 · 16B',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {label:'V 平面 · 4B (先写V!)',hc:'mh-v',bc:'mb-v',cells:uvL('V',4,4).map(t=>({t,c:'v'}))},
+    {label:'U 平面 · 4B',hc:'mh-u',bc:'mb-u',cells:uvL('U',4,4).map(t=>({t,c:'u'}))},
+  ],
+  steps:[
+    {pi:0,bi:0,txt:'📖 第1页 — 搬运 Y 平面',peel:true},
+    {pi:1,bi:1,txt:'📖 第2页 — 搬运 V 平面（V 先于 U！）',peel:true},
+    {pi:2,bi:2,txt:'📖 第3页 — 搬运 U 平面',peel:false},
+  ],
+};
+F.nv12={
+  pages:[
+    {tab:'第1页 · Y 平面 (4×4)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {tab:'第2页 · UV 交错平面',tcls:'page-tab-uv',cls:'page-uv',ecol:'var(--u)',cols:4,
+     cells:(()=>{const a=[];uvL('U',4,4).forEach((u,i)=>{a.push({t:u,c:'u'});a.push({t:uvL('V',4,4)[i],c:'v'});});return a;})()},
+  ],
+  memB:[
+    {label:'Y 平面 · 16B',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {label:'UV 交错 · 8B',hc:'mh-uv',bc:'mb-uv',
+     cells:(()=>{const a=[];uvL('U',4,4).forEach((u,i)=>{a.push({t:u,c:'u'});a.push({t:uvL('V',4,4)[i],c:'v'});});return a;})()},
+  ],
+  steps:[
+    {pi:0,bi:0,txt:'📖 第1页 — 搬运 Y 平面',peel:true},
+    {pi:1,bi:1,txt:'📖 第2页 — 搬运 UV 交错（U₀V₀U₁V₁…）',peel:false},
+  ],
+};
+F.nv21={
+  pages:[
+    {tab:'第1页 · Y 平面 (4×4)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {tab:'第2页 · VU 交错平面（V在U前！）',tcls:'page-tab-vu',cls:'page-vu',ecol:'var(--v)',cols:4,
+     cells:(()=>{const a=[];uvL('V',4,4).forEach((v,i)=>{a.push({t:v,c:'v'});a.push({t:uvL('U',4,4)[i],c:'u'});});return a;})()},
+  ],
+  memB:[
+    {label:'Y 平面 · 16B',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
+    {label:'VU 交错 · 8B',hc:'mh-vu',bc:'mb-vu',
+     cells:(()=>{const a=[];uvL('V',4,4).forEach((v,i)=>{a.push({t:v,c:'v'});a.push({t:uvL('U',4,4)[i],c:'u'});});return a;})()},
+  ],
+  steps:[
+    {pi:0,bi:0,txt:'📖 第1页 — 搬运 Y 平面',peel:true},
+    {pi:1,bi:1,txt:'📖 第2页 — 搬运 VU 交错（V₀U₀V₁U₁…）',peel:false},
+  ],
+};
+F.yuyv={
+  pages:[
+    {tab:'唯一一页 · YUYV 交错排列',tcls:'page-tab-pk',cls:'page-pk',ecol:'var(--accent)',cols:8,
+     cells:(()=>{const a=[];for(let r=0;r<2;r++)for(let c=0;c<4;c+=2){const i=r*2+c/2;a.push({t:'Y'+(r*4+c),c:'y'},{t:'U'+i,c:'u'},{t:'Y'+(r*4+c+1),c:'y'},{t:'V'+i,c:'v'});}return a;})()},
+  ],
+  memB:[
+    {label:'连续内存 · 16B（无分割）',hc:'mh-pk',bc:'mb-pk',
+     cells:(()=>{const a=[];for(let r=0;r<2;r++)for(let c=0;c<4;c+=2){const i=r*2+c/2;a.push({t:'Y'+(r*4+c),c:'y'},{t:'U'+i,c:'u'},{t:'Y'+(r*4+c+1),c:'y'},{t:'V'+i,c:'v'});}return a;})()},
+  ],
+  steps:[{pi:0,bi:0,txt:'直接搬运 — 无需翻页',peel:false}],
+};
+
+/* Build scene */
+const SS={};
+function build(fid){
+  const f=F[fid];if(!f)return;
+  const root=document.getElementById('s-'+fid);if(!root)return;
+  root.innerHTML='';SS[fid]={T:[],on:false};
+
+  /* Book */
+  const bw=document.createElement('div');bw.className='book-wrap';
+  const bk=document.createElement('div');bk.className='book';
+  const sp=document.createElement('div');sp.className='spine';
+  sp.textContent=f.pages.length>2?'三 页':f.pages.length>1?'两 页':'一 页';
+
+  const pb=document.createElement('div');pb.className='pages-box';pb.id='pb-'+fid;
+
+  let maxW=0,maxH=0;
+  f.pages.forEach(p=>{
+    const rows=Math.ceil(p.cells.length/p.cols);
+    const w=p.cols*43+32+20;
+    const h=rows*43+42;
+    if(w>maxW)maxW=w;if(h>maxH)maxH=h;
+  });
+
+  const edgeStep=10;
+  const totalEdge=(f.pages.length-1)*edgeStep;
+  pb.style.width=(maxW+totalEdge)+'px';
+  pb.style.height=(maxH+totalEdge)+'px';
+  pb.style.minHeight=pb.style.height;
+
+  f.pages.forEach((p,pi)=>{
+    const page=document.createElement('div');
+    page.className='page '+p.cls;
+    page.id=`pg-${fid}-${pi}`;
+    page.style.zIndex=f.pages.length-pi;
+    const ofsX=pi*edgeStep;
+    const ofsY=pi*edgeStep;
+    const initT=`translateX(${ofsX}px) translateY(${ofsY}px)`;
+    page.style.transform=initT;
+    page.dataset.it=initT;
+    page.dataset.ox=''+ofsX;
+    page.dataset.oy=''+ofsY;
+
+    const edge=document.createElement('div');
+    edge.className='page-edge';
+    edge.style.background=p.ecol;
+    page.appendChild(edge);
+
+    const bedge=document.createElement('div');
+    bedge.className='page-bottom-edge';
+    bedge.style.background=p.ecol;
+    page.appendChild(bedge);
+
+    const tab=document.createElement('div');
+    tab.className='page-tab '+p.tcls;
+    tab.textContent=p.tab;
+    page.appendChild(tab);
+
+    const grid=document.createElement('div');
+    grid.className='pg';
+    grid.style.gridTemplateColumns=`repeat(${p.cols},40px)`;
+    p.cells.forEach((cell,ci)=>{
+      const d=document.createElement('div');
+      d.className='pc pc-'+cell.c;
+      d.textContent=cell.t;
+      d.id=`pc-${fid}-${pi}-${ci}`;
+      grid.appendChild(d);
+    });
+    page.appendChild(grid);
+    pb.appendChild(page);
+  });
+
+  bk.appendChild(sp);bk.appendChild(pb);bw.appendChild(bk);root.appendChild(bw);
+
+  /* Arrow */
+  const arr=document.createElement('div');arr.className='arr-d';
+  arr.innerHTML='<span class="ai">⬇</span> 逐页搬运到连续内存';
+  root.appendChild(arr);
+
+  /* Memory blocks */
+  const ml=document.createElement('div');ml.className='ma-l';ml.textContent='内存（低地址→高地址）：';
+  root.appendChild(ml);
+  const mbs=document.createElement('div');mbs.className='mbs';
+  f.memB.forEach((blk,bi)=>{
+    if(bi>0){const ar=document.createElement('div');ar.className='m-ar';ar.textContent='→';mbs.appendChild(ar);}
+    const block=document.createElement('div');block.className='mb '+blk.bc;block.id=`mb-${fid}-${bi}`;
+    const hdr=document.createElement('div');hdr.className='mh '+blk.hc;hdr.textContent=blk.label;
+    block.appendChild(hdr);
+    const grid=document.createElement('div');grid.className='mg';
+    blk.cells.forEach((cell,ci)=>{
+      const d=document.createElement('div');d.className='mc mc-'+cell.c;d.textContent=cell.t;
+      d.id=`mc-${fid}-${bi}-${ci}`;grid.appendChild(d);
+    });
+    block.appendChild(grid);mbs.appendChild(block);
+  });
+  root.appendChild(mbs);
+}
+['yuv420p','yv12','nv12','nv21','yuyv'].forEach(build);
+
+/* Flying pixel */
+const bgM={y:'var(--y)',u:'var(--u)',v:'var(--v)',r:'var(--r)',g:'var(--g)',b:'var(--b)',a:'var(--a)'};
+const fgM={y:'#000',u:'#000',v:'#000',r:'#fff',g:'#000',b:'#fff',a:'#fff'};
+function flyPx(src,dst,c,lbl,dur,cb){
+  const sr=src.getBoundingClientRect(),dr=dst.getBoundingClientRect();
+  const el=document.createElement('div');el.className='fly';el.textContent=lbl;
+  el.style.background=bgM[c]||'var(--accent)';el.style.color=fgM[c]||'#000';
+  el.style.left=sr.left+'px';el.style.top=sr.top+'px';el.style.width=sr.width+'px';el.style.height=sr.height+'px';
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>{el.style.left=dr.left+'px';el.style.top=dr.top+'px';el.style.width=dr.width+'px';el.style.height=dr.height+'px';});
+  setTimeout(()=>{el.classList.add('dn');setTimeout(()=>{el.remove();if(cb)cb();},150);},dur);
+}
+
+/* Play animation */
+function play(fid){
+  const f=F[fid],s=SS[fid];if(!f||!s||s.on)return;
+  s.on=true;rst(fid,true);
+  const spd=110,flyD=350;
+  let delay=200;
+
+  f.steps.forEach((step,si)=>{
+    const pgEl=document.getElementById(`pg-${fid}-${step.pi}`);
+    const pCells=pgEl.querySelectorAll('.pc');
+    const bCells=document.getElementById(`mb-${fid}-${step.bi}`).querySelectorAll('.mc');
+    const cnt=Math.min(pCells.length,bCells.length);
+
+    s.T.push(setTimeout(()=>{
+      document.getElementById('st-'+fid).textContent=step.txt;
+      pgEl.classList.add('active-page');
+    },delay));
+
+    for(let i=0;i<cnt;i++){
+      const d=delay;
+      s.T.push(setTimeout(()=>{
+        pCells[i].classList.add('hl');
+        flyPx(pCells[i],bCells[i],f.memB[step.bi].cells[i].c,f.memB[step.bi].cells[i].t,flyD,()=>{bCells[i].classList.add('sh','pp');});
+        setTimeout(()=>{pCells[i].classList.remove('hl');pCells[i].classList.add('dim');},flyD);
+      },d));
+      delay+=spd;
+    }
+    delay+=300;
+    if(step.peel){
+      delay+=500;
+      const ox=parseInt(pgEl.dataset.ox),oy=parseInt(pgEl.dataset.oy);
+      const mk=(dx,dy,sc)=>`translateX(${ox+dx}px) translateY(${oy+dy}px) scale(${sc})`;
+      const peelDur=8000;
+      s.T.push(setTimeout(()=>{
+        pgEl.classList.remove('active-page');
+        pgEl.style.zIndex='20';
+        document.getElementById('st-'+fid).textContent='📖 翻页中…';
+        const anim=pgEl.animate([
+          {transform:mk(0,0,1),       opacity:1, filter:'brightness(1)',   offset:0},
+          {transform:mk(20,-50,1.1),   opacity:1, filter:'brightness(1.4)', offset:0.15},
+          {transform:mk(30,-80,1.1),   opacity:1, filter:'brightness(1.3)', offset:0.3},
+          {transform:mk(40,-180,0.8),  opacity:0.7,filter:'brightness(0.9)', offset:0.55},
+          {transform:mk(60,-340,0.5),  opacity:0.3,filter:'brightness(0.6)', offset:0.8},
+          {transform:mk(70,-450,0.3),  opacity:0,  filter:'brightness(0.3)', offset:1}
+        ],{duration:peelDur,easing:'ease-in-out',fill:'forwards'});
+        anim.onfinish=()=>{
+          pgEl.classList.add('peeled');
+          pgEl.style.transform=mk(70,-450,0.3);
+          pgEl.style.opacity='0';
+          pgEl.style.zIndex='0';
+        };
+      },delay));
+      delay+=peelDur+500;
+    }else{
+      s.T.push(setTimeout(()=>{pgEl.classList.remove('active-page');},delay));
+    }
+  });
+
+  s.T.push(setTimeout(()=>{
+    document.getElementById('st-'+fid).textContent='✅ 全部搬运完成！';
+    s.on=false;
+  },delay+200));
+}
+
+function rst(fid,keep){
+  const s=SS[fid];if(!s)return;
+  if(!keep){s.T.forEach(clearTimeout);s.T=[];s.on=false;}
+  document.querySelectorAll(`[id^="mc-${fid}-"]`).forEach(e=>e.classList.remove('sh','pp'));
+  document.querySelectorAll(`[id^="pc-${fid}-"]`).forEach(e=>e.classList.remove('dim','hl'));
+  const f=F[fid];
+  document.querySelectorAll(`[id^="pg-${fid}-"]`).forEach((e,i)=>{
+    e.getAnimations().forEach(a=>a.cancel());
+    e.classList.remove('peeled','active-page','lifting','sliding');
+    if(e.dataset.it)e.style.transform=e.dataset.it;
+    e.style.opacity='';
+    e.style.filter='';
+    if(f)e.style.zIndex=f.pages.length-i;
+  });
+  document.querySelectorAll('.fly').forEach(e=>e.remove());
+  if(!keep){const st=document.getElementById('st-'+fid);if(st)st.textContent='';}
+}
+
+/* Compare */
+function buildCmp(){
+  const area=document.getElementById('cmp');area.innerHTML='';
+  [{n:'YUV420P (I420)',s:'Y | U | V — 三块分开',b:F.yuv420p.memB,id:'c0'},
+   {n:'NV12',s:'Y | UVUV — 两块',b:F.nv12.memB,id:'c1'},
+   {n:'NV21',s:'Y | VUVU — 两块',b:F.nv21.memB,id:'c2'}].forEach(cfg=>{
+    const it=document.createElement('div');it.className='ci';
+    it.innerHTML=`<h4 style="color:var(--y)">${cfg.n}</h4><div class="ds">${cfg.s}</div>`;
+    const mb=document.createElement('div');mb.className='mbs';
+    cfg.b.forEach((blk,bi)=>{
+      if(bi>0){const ar=document.createElement('div');ar.className='m-ar';ar.textContent='→';mb.appendChild(ar);}
+      const block=document.createElement('div');block.className='mb '+blk.bc;
+      block.innerHTML=`<div class="mh ${blk.hc}">${blk.label}</div>`;
+      const grid=document.createElement('div');grid.className='mg';
+      blk.cells.forEach((cell,ci)=>{const d=document.createElement('div');d.className='mc mc-'+cell.c;d.textContent=cell.t;d.id=`cmc-${cfg.id}-${bi}-${ci}`;grid.appendChild(d);});
+      block.appendChild(grid);mb.appendChild(block);
+    });
+    it.appendChild(mb);area.appendChild(it);
+  });
+}
+buildCmp();
+function playCmp(){document.querySelectorAll('[id^="cmc-"]').forEach((c,i)=>setTimeout(()=>c.classList.add('sh','pp'),i*35));}
+function rstCmp(){document.querySelectorAll('[id^="cmc-"]').forEach(c=>c.classList.remove('sh','pp'));}
+
+/* RGB */
+const RF={rgb24:{ch:['r','g','b'],d:'RGB24: R→G→B 每像素3B'},bgr24:{ch:['b','g','r'],d:'BGR24: B→G→R (OpenCV默认)'},rgba32:{ch:['r','g','b','a'],d:'RGBA32: R→G→B→A 带透明'},bgra32:{ch:['b','g','r','a'],d:'BGRA32: B→G→R→A (Windows)'},argb32:{ch:['a','r','g','b'],d:'ARGB32: A→R→G→B (macOS)'}};
+const CN={r:'R',g:'G',b:'B',a:'A'};
+let curR='rgb24';
+function buildR(){
+  const rf=RF[curR],np=4;
+  F.rgb={
+    pages:[{tab:rf.d,tcls:'page-tab-pk',cls:'page-pk',ecol:'var(--accent)',
+      cols:rf.ch.length*np,cells:(()=>{const a=[];for(let p=0;p<np;p++)rf.ch.forEach(c=>a.push({t:CN[c]+p,c}));return a;})()}],
+    memB:[(()=>{const cells=[];for(let p=0;p<np;p++)rf.ch.forEach(c=>cells.push({t:CN[c]+p,c}));return{label:rf.d,hc:'mh-pk',bc:'mb-pk',cells};})()],
+    steps:[{pi:0,bi:0,txt:rf.d,peel:false}],
+  };
+  build('rgb');
+}
+buildR();
+function swR(btn,id){document.querySelectorAll('#rgb-b .bt').forEach(b=>b.classList.remove('on'));btn.classList.add('on');curR=id;buildR();}
+
+/* Flashcards */
+const fcD=[
+  {q:'YUV420P',h:'翻转看答案',a:'别名 <strong>I420</strong><br><strong>Planar</strong> · 三页书<br>Y→U→V',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'|',c:'s'},{t:'U',c:'u'},{t:'|',c:'s'},{t:'V',c:'v'}]},
+  {q:'YV12',h:'和I420的区别',a:'<strong>Planar</strong> · 三页<br><strong>V 在 U 前面！</strong><br>Y→V→U',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'|',c:'s'},{t:'V',c:'v'},{t:'|',c:'s'},{t:'U',c:'u'}]},
+  {q:'NV12',h:'硬件编解码最爱',a:'<strong>Semi-Planar</strong> · 两页<br>Y + <strong>UV</strong>UV交错',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'|',c:'s'},{t:'U',c:'u'},{t:'V',c:'v'},{t:'U',c:'u'},{t:'V',c:'v'}]},
+  {q:'NV21',h:'和NV12差一字',a:'<strong>Semi-Planar</strong> · 两页<br><strong>V在U前</strong> · VUVU',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'|',c:'s'},{t:'V',c:'v'},{t:'U',c:'u'},{t:'V',c:'v'},{t:'U',c:'u'}]},
+  {q:'YUYV',h:'也叫 YUY2',a:'<strong>Packed</strong> · 一页<br>4:2:2 · YUYV循环',m:[{t:'Y',c:'y'},{t:'U',c:'u'},{t:'Y',c:'y'},{t:'V',c:'v'}]},
+  {q:'12 vs 21',h:'数字暗示顺序',a:'NV<strong>12</strong>=U先V后<br>NV<strong>21</strong>=V先U后',m:[]},
+  {q:'BGR24',h:'OpenCV注意',a:'B→G→R 反过来<br>OpenCV 默认格式',m:[{t:'B',c:'b'},{t:'G',c:'g'},{t:'R',c:'r'}]},
+  {q:'三种排列',h:'核心区分',a:'<strong>P</strong>lanar：三页书<br><strong>S</strong>emi-P：两页书<br><strong>P</strong>acked：一页纸',m:[]},
+];
+let fcPg=0;const fcN=4;
+function fcR(){
+  const g=document.getElementById('fcg');g.innerHTML='';
+  const s=fcPg*fcN,e=Math.min(s+fcN,fcD.length);
+  for(let i=s;i<e;i++){
+    const d=fcD[i],c=document.createElement('div');c.className='fc';c.onclick=()=>c.classList.toggle('fl');
+    let mh='';if(d.m.length)mh='<div class="fm">'+d.m.map(x=>x.c==='s'?'<div class="fb" style="background:none;color:var(--dim)">|</div>':`<div class="fb" style="background:var(--${x.c});color:${x.c==='r'||x.c==='b'||x.c==='a'?'#fff':'#000'}">${x.t}</div>`).join('')+'</div>';
+    c.innerHTML=`<div class="ff f1"><div class="fq">${d.q}</div><div class="fh">${d.h}</div></div><div class="ff f2"><div class="fa">${d.a}</div>${mh}</div>`;
+    g.appendChild(c);
+  }
+  document.getElementById('fcp').textContent=`${fcPg+1}/${Math.ceil(fcD.length/fcN)}`;
+}
+function fcN2(){if((fcPg+1)*fcN<fcD.length){fcPg++;fcR();}}
+function fcP(){if(fcPg>0){fcPg--;fcR();}}
+function fcS(){for(let i=fcD.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[fcD[i],fcD[j]]=[fcD[j],fcD[i]];}fcPg=0;fcR();}
+/* fix naming collision */
+window.fcN=fcN2;
+fcR();
+
+/* Mnemonic */
+const mL=[
+  {t:'后缀 P → Planar（三页书）',c:'color:var(--y)',s:'YUV420P / YUV422P'},
+  {t:'NV 开头 → Semi-Planar（两页书）',c:'color:var(--u)',s:'Y一页 + UV交错一页'},
+  {t:'NV12=U先V后 / NV21=V先U后',c:'color:var(--accent)',s:'数字=UV顺序'},
+  {t:'YUYV四字母 → Packed（一页纸）',c:'color:var(--v)',s:'字母顺序=字节顺序'},
+  {t:'420=2×2共享 / 422=水平共享',c:'color:var(--accent)',s:'420省一半 / 422省三分之一'},
+  {t:'BGR = RGB 倒序 → OpenCV默认',c:'color:var(--v)',s:'注意通道顺序！'},
+  {t:'三兄弟：I420 / NV12 / NV21',c:'color:var(--y)',s:'记住这三个够用'},
+];
+let mT=[];
+function mnP(){mnR();const d=document.getElementById('mn');d.innerHTML='';mL.forEach((l,i)=>{const e=document.createElement('div');e.className='mnl';e.style.cssText=l.c;e.innerHTML=`${l.t}<br><span style="font-size:11px;color:var(--dim);font-weight:400">${l.s}</span>`;d.appendChild(e);mT.push(setTimeout(()=>e.classList.add('sh','hl'),i*600));mT.push(setTimeout(()=>e.classList.remove('hl'),i*600+400));});}
+function mnR(){mT.forEach(clearTimeout);mT=[];document.getElementById('mn').innerHTML='';}
+
+/* Match */
+const mP=[{l:'YUV420P',r:'Y…|U…|V…(三块)'},{l:'NV12',r:'Y…|UVUV…(两块)'},{l:'NV21',r:'Y…|VUVU…(两块)'},{l:'YUYV',r:'YUYV YUYV…(一块)'},{l:'YV12',r:'Y…|V…|U…(V在U前)'},{l:'RGB24',r:'RGBRGB…(三字节)'}];
+let mS;
+function mtBuild(){
+  const g=document.getElementById('mtg');g.innerHTML='';mS={sel:null,sc:0,tot:mP.length,done:new Set()};
+  const lc=document.createElement('div');lc.className='mtc';const rc=document.createElement('div');rc.className='mtc';
+  const sr=[...mP].sort(()=>Math.random()-.5);
+  mP.forEach((p,i)=>{const e=document.createElement('div');e.className='mti';e.textContent=p.l;e.dataset.i=i;e.dataset.s='l';e.onclick=()=>mtSel(e,'l',i);lc.appendChild(e);});
+  sr.forEach(p=>{const i=mP.indexOf(p);const e=document.createElement('div');e.className='mti';e.textContent=p.r;e.dataset.i=i;e.dataset.s='r';e.onclick=()=>mtSel(e,'r',i);rc.appendChild(e);});
+  g.appendChild(lc);g.appendChild(rc);mtU();
+}
+function mtSel(el,side,idx){
+  if(mS.done.has(idx)&&side==='l')return;
+  if(side==='l'){document.querySelectorAll('.mti[data-s="l"]').forEach(e=>e.classList.remove('sel'));el.classList.add('sel');mS.sel=idx;}
+  else if(mS.sel!==null){if(idx===mS.sel){mS.done.add(idx);mS.sc++;el.classList.add('ok');const le=document.querySelector(`.mti[data-s="l"][data-i="${idx}"]`);if(le){le.classList.add('ok');le.classList.remove('sel');}mS.sel=null;mtU();}else{el.classList.add('bad');setTimeout(()=>el.classList.remove('bad'),500);}}
+}
+function mtU(){const s=document.getElementById('mts');s.textContent=mS.sc===mS.tot?'全部正确！':`${mS.sc}/${mS.tot}`;s.style.color=mS.sc===mS.tot?'var(--u)':'var(--dim)';}
+function mtR(){mtBuild();}
+mtBuild();
+</script>
+</body>
+</html>
