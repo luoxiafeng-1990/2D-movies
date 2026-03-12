@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>交互式参数调节 — 从线性函数到 Sigmoid 分类</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e1a;color:#e2e8f0;overflow-x:hidden}
+.header{text-align:center;padding:12px 20px 4px;background:#0f1628}
+.header h1{font-size:20px;color:#60a5fa}
+.header p{color:#64748b;font-size:12px;margin-top:2px}
+.tabs{display:flex;justify-content:center;gap:0;padding:6px 10px 0}
+.tab{padding:7px 20px;border:1px solid #1e293b;border-bottom:none;border-radius:8px 8px 0 0;
+  background:#111827;color:#94a3b8;font-size:13px;cursor:pointer;transition:.15s;position:relative;top:1px}
+.tab:hover{color:#e2e8f0;background:#1a2332}
+.tab.active{background:#0d1117;color:#60a5fa;font-weight:700;border-color:#334155;border-bottom:1px solid #0d1117;z-index:1}
+.main{border:1px solid #334155;border-radius:0 8px 8px 8px;background:#0d1117;margin:0 10px;padding:10px}
+.desc{text-align:center;padding:6px;font-size:13px;color:#94a3b8;line-height:1.6}
+canvas{display:block;margin:0 auto;border-radius:8px;border:1px solid #1e293b;background:#0d1117}
+.controls{display:flex;flex-wrap:wrap;justify-content:center;gap:16px;padding:10px}
+.slider-group{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 16px;min-width:200px;text-align:center}
+.slider-group label{display:block;font-size:12px;color:#94a3b8;margin-bottom:4px}
+.slider-group .val{font-size:18px;font-weight:700;font-family:monospace;margin:4px 0}
+.slider-group input[type=range]{width:100%;accent-color:#60a5fa}
+.hl-b{color:#60a5fa;font-weight:700}
+.hl-r{color:#f87171;font-weight:700}
+.hl-g{color:#4ade80;font-weight:700}
+.hl-y{color:#fbbf24;font-weight:700}
+.hl-p{color:#c084fc;font-weight:700}
+.hl-o{color:#fb923c;font-weight:700}
+.info-panel{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;padding:6px 10px}
+.info-card{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:8px 12px;font-size:12px;line-height:1.7;font-family:monospace}
+.loss-display{text-align:center;font-size:16px;padding:6px;font-weight:700}
+.result-good{color:#4ade80;background:#0c1a12;border:1px solid #064e3b;border-radius:8px;padding:6px 16px;display:inline-block}
+.result-bad{color:#f87171;background:#1c1017;border:1px solid #7f1d1d;border-radius:8px;padding:6px 16px;display:inline-block}
+.result-ok{color:#fbbf24;background:#1a1708;border:1px solid #713f12;border-radius:8px;padding:6px 16px;display:inline-block}
+table{border-collapse:collapse;font-size:11px;font-family:monospace;margin:0 auto}
+th{background:#1e293b;color:#94a3b8;padding:3px 6px;border:1px solid #2d3748;font-weight:600}
+td{padding:3px 6px;border:1px solid #1e293b;text-align:center}
+.hint{text-align:center;padding:4px;font-size:11px;color:#64748b;font-style:italic}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>交互式参数调节</h1>
+<p>拖动滑块，观察函数图像如何变化 — 从线性函数到 Sigmoid 分类</p>
+</div>
+
+<div class="tabs">
+<div class="tab active" onclick="switchTab(0)">① 线性函数 y=kx+b</div>
+<div class="tab" onclick="switchTab(1)">② Sigmoid σ(wx+b)</div>
+<div class="tab" onclick="switchTab(2)">③ 手动分类挑战</div>
+</div>
+
+<div class="main">
+<div class="desc" id="desc"></div>
+<canvas id="cv" width="700" height="420"></canvas>
+<div class="controls" id="ctrls"></div>
+<div class="info-panel" id="info"></div>
+</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=700,H=420;
+let activeTab=0;
+
+// Shared drawing helpers
+function drawAxes(xMin,xMax,yMin,yMax,M,xLabel,yLabel){
+  const PW=W-M.l-M.r, PH=H-M.t-M.b;
+  const x2px=v=>M.l+(v-xMin)/(xMax-xMin)*PW;
+  const y2py=v=>M.t+(1-(v-yMin)/(yMax-yMin))*PH;
+
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='#151d2e';ctx.lineWidth=0.5;
+  const xStep=bestStep(xMax-xMin,10);
+  for(let x=Math.ceil(xMin/xStep)*xStep;x<=xMax;x+=xStep){
+    const px=x2px(x);ctx.beginPath();ctx.moveTo(px,M.t);ctx.lineTo(px,M.t+PH);ctx.stroke();
+  }
+  const yStep=bestStep(yMax-yMin,8);
+  for(let y=Math.ceil(yMin/yStep)*yStep;y<=yMax;y+=yStep){
+    const py=y2py(y);ctx.beginPath();ctx.moveTo(M.l,py);ctx.lineTo(M.l+PW,py);ctx.stroke();
+  }
+
+  // Zero axes
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;
+  if(yMin<=0&&yMax>=0){const py=y2py(0);ctx.beginPath();ctx.moveTo(M.l,py);ctx.lineTo(M.l+PW,py);ctx.stroke();}
+  if(xMin<=0&&xMax>=0){const px=x2px(0);ctx.beginPath();ctx.moveTo(px,M.t);ctx.lineTo(px,M.t+PH);ctx.stroke();}
+
+  // Axis labels
+  ctx.fillStyle='#8b9dc3';ctx.font='10px monospace';
+  ctx.textAlign='center';ctx.textBaseline='top';
+  for(let x=Math.ceil(xMin/xStep)*xStep;x<=xMax;x+=xStep)
+    ctx.fillText(Number(x.toFixed(2)),x2px(x),M.t+PH+4);
+  ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let y=Math.ceil(yMin/yStep)*yStep;y<=yMax;y+=yStep)
+    ctx.fillText(Number(y.toFixed(2)),M.l-4,y2py(y));
+
+  ctx.fillStyle='#60a5fa';ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+  ctx.fillText(xLabel,M.l+PW/2,H-4);
+  ctx.save();ctx.translate(12,M.t+PH/2);ctx.rotate(-Math.PI/2);ctx.fillText(yLabel,0,0);ctx.restore();
+
+  return {x2px,y2py,PW,PH};
+}
+
+function bestStep(range,maxTicks){
+  const raw=range/maxTicks;
+  const mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const norm=raw/mag;
+  if(norm<=1)return mag;if(norm<=2)return 2*mag;if(norm<=5)return 5*mag;return 10*mag;
+}
+
+const sigmoid=z=>1/(1+Math.exp(-z));
+
+// ===== TAB 0: Linear function =====
+let linK=1.0, linB=0;
+
+function drawLinear(){
+  const M={l:55,r:20,t:20,b:35};
+  const xMin=-5,xMax=5,yMin=-6,yMax=6;
+  const {x2px,y2py}=drawAxes(xMin,xMax,yMin,yMax,M,'x','y');
+
+  // Draw line
+  ctx.strokeStyle='#60a5fa';ctx.lineWidth=3;ctx.beginPath();
+  for(let x=xMin;x<=xMax;x+=0.05){
+    const y=linK*x+linB;
+    const px=x2px(x),py=y2py(Math.max(yMin,Math.min(yMax,y)));
+    if(x===xMin)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+
+  // Mark y-intercept (b)
+  const bpy=y2py(linB);
+  if(linB>=yMin&&linB<=yMax){
+    ctx.beginPath();ctx.arc(x2px(0),bpy,6,0,Math.PI*2);
+    ctx.fillStyle='#fbbf24';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#fbbf24';ctx.font='bold 11px monospace';ctx.textAlign='left';
+    ctx.fillText('b='+linB.toFixed(1),x2px(0)+10,bpy-5);
+  }
+
+  // Show slope triangle
+  if(Math.abs(linK)>0.05){
+    const sx=1,ex=2;
+    const sy=linK*sx+linB, ey=linK*ex+linB;
+    if(sy>=yMin&&sy<=yMax&&ey>=yMin&&ey<=yMax){
+      ctx.strokeStyle='#4ade80';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(x2px(sx),y2py(sy));ctx.lineTo(x2px(ex),y2py(sy));ctx.lineTo(x2px(ex),y2py(ey));ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle='#4ade80';ctx.font='bold 10px monospace';ctx.textAlign='center';
+      ctx.fillText('Δx=1',x2px(1.5),y2py(sy)+(linK>0?15:-8));
+      ctx.fillText('Δy='+linK.toFixed(1),x2px(ex)+25,y2py((sy+ey)/2));
+    }
+  }
+
+  // Equation
+  ctx.fillStyle='#f1f5f9';ctx.font='bold 16px monospace';ctx.textAlign='center';
+  const bSign=linB>=0?'+':'';
+  ctx.fillText(`y = ${linK.toFixed(1)}x ${bSign} ${linB.toFixed(1)}`,W/2,M.t+18);
+}
+
+function setupLinearControls(){
+  document.getElementById('desc').innerHTML='拖动 <span class="hl-g">k（斜率）</span> 观察直线倾斜角度变化，拖动 <span class="hl-y">b（截距）</span> 观察直线上下平移';
+  document.getElementById('ctrls').innerHTML=`
+    <div class="slider-group">
+      <label>k（斜率）— 控制倾斜角度</label>
+      <div class="val" style="color:#4ade80" id="linKVal">${linK.toFixed(1)}</div>
+      <input type="range" min="-3" max="3" step="0.1" value="${linK}" oninput="linK=parseFloat(this.value);document.getElementById('linKVal').textContent=linK.toFixed(1);drawLinear()">
+      <div style="font-size:10px;color:#64748b">← 负:下斜 | 0:水平 | 正:上斜 →</div>
+    </div>
+    <div class="slider-group">
+      <label>b（截距）— 控制上下位置</label>
+      <div class="val" style="color:#fbbf24" id="linBVal">${linB.toFixed(1)}</div>
+      <input type="range" min="-4" max="4" step="0.1" value="${linB}" oninput="linB=parseFloat(this.value);document.getElementById('linBVal').textContent=linB.toFixed(1);drawLinear()">
+      <div style="font-size:10px;color:#64748b">← 下移 | 0:过原点 | 上移 →</div>
+    </div>`;
+  document.getElementById('info').innerHTML=`
+    <div class="info-card"><b style="color:#4ade80">k（斜率）</b>：x 每增加 1，y 变化多少<br>k=2 → 线陡峭上升 | k=0 → 水平线 | k=-1 → 缓慢下降</div>
+    <div class="info-card"><b style="color:#fbbf24">b（截距）</b>：直线与 y 轴的交点<br>b=3 → 经过 (0,3) | b=0 → 经过原点 | b=-2 → 经过 (0,-2)</div>`;
+}
+
+// ===== TAB 1: Sigmoid =====
+let sigW=1.0, sigB=0;
+
+function drawSigmoid(){
+  const M={l:55,r:20,t:20,b:35};
+  const xMin=-6,xMax=6,yMin=-0.1,yMax=1.15;
+  const {x2px,y2py,PW,PH}=drawAxes(xMin,xMax,yMin,yMax,M,'输入 x','ŷ = σ(wx+b)');
+
+  // y=0.5 line
+  ctx.strokeStyle='#fbbf2440';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+  const py5=y2py(0.5);ctx.beginPath();ctx.moveTo(M.l,py5);ctx.lineTo(M.l+PW,py5);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#fbbf24';ctx.font='10px sans-serif';ctx.textAlign='right';
+  ctx.fillText('ŷ=0.5',M.l+PW+15,py5);
+
+  // Standard sigmoid (ghost)
+  ctx.strokeStyle='#334155';ctx.lineWidth=1;ctx.beginPath();
+  for(let x=xMin;x<=xMax;x+=0.05){
+    const px=x2px(x),py=y2py(sigmoid(x));
+    if(x===xMin)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+  ctx.fillStyle='#334155';ctx.font='9px sans-serif';ctx.textAlign='left';
+  ctx.fillText('标准 σ(x) [w=1,b=0]',x2px(2.5),y2py(sigmoid(2.5))-8);
+
+  // Current sigmoid
+  ctx.strokeStyle='#c084fc';ctx.lineWidth=3;ctx.beginPath();
+  for(let x=xMin;x<=xMax;x+=0.04){
+    const z=sigW*x+sigB;
+    const y=sigmoid(z);
+    const px=x2px(x),py=y2py(y);
+    if(x===xMin)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+
+  // Decision boundary at x = -b/w
+  if(Math.abs(sigW)>0.01){
+    const bx=-sigB/sigW;
+    if(bx>=xMin&&bx<=xMax){
+      ctx.strokeStyle='#f8717180';ctx.lineWidth=2;ctx.setLineDash([5,3]);
+      const bpx=x2px(bx);
+      ctx.beginPath();ctx.moveTo(bpx,M.t);ctx.lineTo(bpx,M.t+PH);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();ctx.arc(bpx,py5,6,0,Math.PI*2);
+      ctx.fillStyle='#f87171';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
+      ctx.fillStyle='#f87171';ctx.font='bold 11px monospace';ctx.textAlign='center';
+      ctx.fillText('x='+bx.toFixed(2),bpx,py5+18);
+      ctx.font='9px sans-serif';
+      ctx.fillText('分界点(ŷ=0.5)',bpx,py5+30);
+    }
+  }
+
+  // Equation
+  ctx.fillStyle='#f1f5f9';ctx.font='bold 14px monospace';ctx.textAlign='center';
+  const bSign=sigB>=0?'+':'';
+  ctx.fillText(`ŷ = σ(${sigW.toFixed(1)}x ${bSign} ${sigB.toFixed(1)})`,W/2,M.t+16);
+
+  // Annotations for w effect
+  if(Math.abs(sigW)>0.01){
+    ctx.fillStyle='#c084fc';ctx.font='10px sans-serif';ctx.textAlign='left';
+    const steepness=Math.abs(sigW)>2?'很陡（分类很确定）':Math.abs(sigW)>0.5?'中等':'很缓（分类不确定）';
+    ctx.fillText('陡峭度: '+steepness,M.l+5,M.t+PH-5);
+    if(sigW<0){
+      ctx.fillStyle='#fb923c';
+      ctx.fillText('⚠ w<0: 曲线翻转！',M.l+5,M.t+PH-18);
+    }
+  }
+}
+
+function setupSigmoidControls(){
+  document.getElementById('desc').innerHTML='<span class="hl-p">w（权重）</span> 控制 sigmoid 的陡峭度，<span class="hl-r">b（偏置）</span> 控制曲线左右平移。灰色是标准 σ(x) 作参考';
+  document.getElementById('ctrls').innerHTML=`
+    <div class="slider-group">
+      <label>w（权重）— 控制陡峭度</label>
+      <div class="val" style="color:#c084fc" id="sigWVal">${sigW.toFixed(1)}</div>
+      <input type="range" min="-5" max="5" step="0.1" value="${sigW}" oninput="sigW=parseFloat(this.value);document.getElementById('sigWVal').textContent=sigW.toFixed(1);drawSigmoid()">
+      <div style="font-size:10px;color:#64748b">|w|大 → 陡峭 | |w|小 → 平缓 | w<0 → 翻转</div>
+    </div>
+    <div class="slider-group">
+      <label>b（偏置）— 控制左右位置</label>
+      <div class="val" style="color:#f87171" id="sigBVal">${sigB.toFixed(1)}</div>
+      <input type="range" min="-6" max="6" step="0.1" value="${sigB}" oninput="sigB=parseFloat(this.value);document.getElementById('sigBVal').textContent=sigB.toFixed(1);drawSigmoid()">
+      <div style="font-size:10px;color:#64748b">b>0 → 左移 | b=0 → 居中 | b<0 → 右移</div>
+    </div>`;
+  document.getElementById('info').innerHTML=`
+    <div class="info-card"><b style="color:#c084fc">w（权重）的作用</b><br>
+    |w| 越大 → 曲线越陡 → 分类越"果断"<br>
+    |w| 越小 → 曲线越缓 → 分类越"犹豫"<br>
+    w<0 → 曲线完全翻转（左高右低）</div>
+    <div class="info-card"><b style="color:#f87171">b（偏置）的作用</b><br>
+    分界点 x = -b/w<br>
+    b>0 → 分界点左移（更容易判为 1）<br>
+    b<0 → 分界点右移（更不容易判为 1）</div>`;
+}
+
+// ===== TAB 2: Classification game =====
+let gameW=0.5, gameB=0;
+
+const samples=[
+  {x:-3.0, y:0, label:'非猫A'},
+  {x:-1.5, y:0, label:'非猫B'},
+  {x:-0.5, y:0, label:'非猫C'},
+  {x: 0.3, y:0, label:'非猫D'},
+  {x: 1.5, y:1, label:'猫E'},
+  {x: 2.5, y:1, label:'猫F'},
+  {x: 3.5, y:1, label:'猫G'},
+  {x: 4.5, y:1, label:'猫H'},
+];
+
+function drawGame(){
+  const M={l:55,r:20,t:20,b:35};
+  const xMin=-5,xMax=6,yMin=-0.15,yMax=1.2;
+  const {x2px,y2py,PW,PH}=drawAxes(xMin,xMax,yMin,yMax,M,'特征值 x','ŷ = σ(wx+b)');
+
+  // y=0.5 line
+  ctx.strokeStyle='#fbbf2440';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+  const py5=y2py(0.5);ctx.beginPath();ctx.moveTo(M.l,py5);ctx.lineTo(M.l+PW,py5);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#fbbf24';ctx.font='9px sans-serif';ctx.textAlign='right';
+  ctx.fillText('分界线 ŷ=0.5',M.l+PW,py5-5);
+
+  // Target regions
+  ctx.fillStyle='#f871710a';
+  ctx.fillRect(M.l,y2py(0.5),PW,y2py(yMin)-y2py(0.5));
+  ctx.fillStyle='#4ade800a';
+  ctx.fillRect(M.l,M.t,PW,y2py(0.5)-M.t);
+  ctx.fillStyle='#4ade8030';ctx.font='10px sans-serif';ctx.textAlign='right';
+  ctx.fillText('判为"猫" (ŷ>0.5)',M.l+PW-5,M.t+14);
+  ctx.fillStyle='#f8717130';
+  ctx.fillText('判为"非猫" (ŷ<0.5)',M.l+PW-5,M.t+PH-6);
+
+  // Sigmoid curve
+  ctx.strokeStyle='#c084fc';ctx.lineWidth=3;ctx.beginPath();
+  for(let x=xMin;x<=xMax;x+=0.04){
+    const z=gameW*x+gameB;
+    const y=sigmoid(z);
+    const px=x2px(x),py=y2py(Math.max(yMin,Math.min(yMax,y)));
+    if(x===xMin)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+
+  // Decision boundary
+  if(Math.abs(gameW)>0.01){
+    const bx=-gameB/gameW;
+    if(bx>=xMin&&bx<=xMax){
+      ctx.strokeStyle='#f8717160';ctx.lineWidth=2;ctx.setLineDash([5,3]);
+      const bpx=x2px(bx);
+      ctx.beginPath();ctx.moveTo(bpx,M.t);ctx.lineTo(bpx,M.t+PH);ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // Draw samples
+  let totalLoss=0, correct=0;
+  const details=[];
+  samples.forEach((s,idx)=>{
+    const z=gameW*s.x+gameB;
+    const yhat=sigmoid(z);
+    const loss=(yhat-s.y)**2;
+    totalLoss+=loss;
+    const pred=yhat>=0.5?1:0;
+    const isCorrect=pred===s.y;
+    if(isCorrect) correct++;
+    details.push({...s,z,yhat,loss,pred,isCorrect});
+
+    const px=x2px(s.x);
+    const targetPy=y2py(s.y);
+    const predPy=y2py(yhat);
+
+    // Dotted line from point to sigmoid prediction
+    ctx.strokeStyle=isCorrect?'#4ade8040':'#f8717140';
+    ctx.lineWidth=1;ctx.setLineDash([2,2]);
+    ctx.beginPath();ctx.moveTo(px,targetPy);ctx.lineTo(px,predPy);ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Target point (on y=0 or y=1 line)
+    ctx.beginPath();ctx.arc(px,targetPy,8,0,Math.PI*2);
+    ctx.fillStyle=s.y===1?'#22c55e':'#ef4444';ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();
+
+    // Prediction dot on sigmoid
+    ctx.beginPath();ctx.arc(px,predPy,5,0,Math.PI*2);
+    ctx.fillStyle=isCorrect?'#4ade80':'#f87171';ctx.fill();
+
+    // Label
+    ctx.fillStyle='#fff';ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(s.y===1?'猫':'非',px,targetPy);
+
+    // ŷ value
+    ctx.fillStyle=isCorrect?'#4ade80':'#f87171';ctx.font='bold 9px monospace';ctx.textBaseline='bottom';
+    const labelY=s.y===1?targetPy-14:targetPy+20;
+    ctx.fillText(yhat.toFixed(2),px,labelY);
+  });
+
+  // Equation
+  ctx.fillStyle='#f1f5f9';ctx.font='bold 14px monospace';ctx.textAlign='center';
+  const bSign=gameB>=0?'+':'';
+  ctx.fillText(`ŷ = σ(${gameW.toFixed(1)}x ${bSign} ${gameB.toFixed(1)})`,W/2,M.t+16);
+
+  // Update info
+  const acc=correct/samples.length*100;
+  const lossAvg=totalLoss/samples.length;
+  const resultClass=acc===100?'result-good':acc>=75?'result-ok':'result-bad';
+  const resultText=acc===100?'完美分类！所有样本都判断正确！':
+    acc>=75?`还不错，继续调！${correct}/${samples.length} 正确`:
+    `继续加油！${correct}/${samples.length} 正确`;
+
+  document.getElementById('info').innerHTML=`
+    <div class="info-card" style="min-width:280px">
+      <div class="loss-display">
+        <span class="${resultClass}">${resultText}</span>
+      </div>
+      <div style="text-align:center;margin-top:4px">
+        正确率: <b>${acc.toFixed(0)}%</b> (${correct}/${samples.length}) | 
+        平均 Loss: <b>${lossAvg.toFixed(4)}</b>
+      </div>
+    </div>
+    <div class="info-card" style="min-width:360px">
+      <table><thead><tr><th>样本</th><th>x</th><th>真实</th><th>z=wx+b</th><th>ŷ=σ(z)</th><th>预测</th><th>Loss</th><th>判定</th></tr></thead><tbody>
+      ${details.map(d=>{
+        const cls=d.isCorrect?'':'style="background:#1c1017"';
+        return `<tr ${cls}>
+          <td>${d.label}</td><td>${d.x.toFixed(1)}</td>
+          <td style="color:${d.y===1?'#4ade80':'#f87171'}">${d.y===1?'猫':'非猫'}</td>
+          <td>${d.z.toFixed(2)}</td><td>${d.yhat.toFixed(3)}</td>
+          <td style="color:${d.pred===1?'#4ade80':'#f87171'}">${d.pred===1?'猫':'非猫'}</td>
+          <td>${d.loss.toFixed(4)}</td>
+          <td>${d.isCorrect?'<span style="color:#4ade80">✓</span>':'<span style="color:#f87171">✗</span>'}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+    </div>`;
+}
+
+function setupGameControls(){
+  document.getElementById('desc').innerHTML='你的任务：拖动 <span class="hl-p">w</span> 和 <span class="hl-r">b</span>，让紫色 sigmoid 曲线把 <span class="hl-g">猫(y=1)</span> 和 <span class="hl-r">非猫(y=0)</span> 正确分开！';
+  document.getElementById('ctrls').innerHTML=`
+    <div class="slider-group">
+      <label>w（权重）</label>
+      <div class="val" style="color:#c084fc" id="gameWVal">${gameW.toFixed(1)}</div>
+      <input type="range" min="-5" max="5" step="0.1" value="${gameW}" oninput="gameW=parseFloat(this.value);document.getElementById('gameWVal').textContent=gameW.toFixed(1);drawGame()">
+    </div>
+    <div class="slider-group">
+      <label>b（偏置）</label>
+      <div class="val" style="color:#f87171" id="gameBVal">${gameB.toFixed(1)}</div>
+      <input type="range" min="-8" max="8" step="0.1" value="${gameB}" oninput="gameB=parseFloat(this.value);document.getElementById('gameBVal').textContent=gameB.toFixed(1);drawGame()">
+    </div>
+    <div class="slider-group" style="background:#0f1628;border-color:#334155">
+      <label style="color:#fbbf24">提示</label>
+      <div style="font-size:11px;color:#94a3b8;line-height:1.6">
+        1. 先调 w 控制陡峭度<br>
+        2. 再调 b 移动分界点<br>
+        3. 目标：绿点在上方，红点在下方
+      </div>
+    </div>`;
+  document.getElementById('info').innerHTML='';
+}
+
+// ===== Tab switching =====
+function switchTab(idx){
+  activeTab=idx;
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  if(idx===0){setupLinearControls();drawLinear();}
+  else if(idx===1){setupSigmoidControls();drawSigmoid();}
+  else{setupGameControls();drawGame();}
+}
+
+switchTab(0);
+</script>
+</body>
+</html>

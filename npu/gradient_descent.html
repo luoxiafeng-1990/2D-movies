@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>梯度下降完整可视化 — 导数如何决定权重方向</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e1a;color:#e2e8f0;overflow-x:hidden}
+.header{text-align:center;padding:14px 20px 4px;background:#0f1628}
+.header h1{font-size:22px;color:#60a5fa}
+.header p{color:#64748b;font-size:12px;margin-top:2px}
+.tabs{display:flex;justify-content:center;gap:0;padding:8px 10px 0}
+.tab{padding:8px 24px;border:1px solid #1e293b;border-bottom:none;border-radius:8px 8px 0 0;
+  background:#111827;color:#94a3b8;font-size:13px;cursor:pointer;transition:.15s;position:relative;top:1px}
+.tab:hover{color:#e2e8f0;background:#1a2332}
+.tab.active{background:#0d1117;color:#60a5fa;font-weight:700;border-color:#334155;border-bottom:1px solid #0d1117;z-index:1}
+.tab .badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px}
+.tab .badge-neg{background:#064e3b;color:#4ade80}
+.tab .badge-pos{background:#7f1d1d;color:#f87171}
+.tab .badge-mix{background:#713f12;color:#fbbf24}
+.main-panel{border:1px solid #334155;border-radius:0 8px 8px 8px;background:#0d1117;margin:0 10px;padding:6px}
+.row{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;padding:4px 0}
+canvas{border-radius:8px;border:1px solid #1e293b;background:#0d1117}
+.card{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px;font-size:12px;line-height:1.7}
+.card h3{font-size:11px;color:#3b82f6;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px}
+.card .mono{font-family:monospace}
+.hl-b{color:#60a5fa;font-weight:700}
+.hl-r{color:#f87171;font-weight:700}
+.hl-g{color:#4ade80;font-weight:700}
+.hl-y{color:#fbbf24;font-weight:700}
+.hl-p{color:#c084fc;font-weight:700}
+.step-bar{display:flex;justify-content:center;align-items:center;gap:8px;padding:6px}
+.btn{padding:6px 16px;border:1px solid #334155;border-radius:5px;background:#1e293b;color:#e2e8f0;font-size:12px;cursor:pointer;transition:.15s}
+.btn:hover{background:#334155;border-color:#60a5fa}
+.btn.active{background:#2563eb;border-color:#3b82f6;color:#fff}
+.info-row{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:4px 6px}
+.chain-card{max-width:920px;margin:0 auto}
+table{width:100%;border-collapse:collapse;font-size:11px;font-family:monospace}
+th{background:#1e293b;color:#94a3b8;padding:4px 3px;text-align:center;border:1px solid #2d3748;font-weight:600}
+td{padding:4px 3px;text-align:center;border:1px solid #1e293b}
+td.cur{background:#1e3a5f;color:#93c5fd;font-weight:700}
+.scenario-desc{text-align:center;padding:6px;font-size:13px;color:#94a3b8;line-height:1.6}
+.scenario-desc b{font-size:14px}
+.key-diff{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;padding:2px 10px 8px}
+.key-diff .kd-item{background:#1e293b;border-radius:6px;padding:6px 14px;font-size:12px;text-align:center;border:1px solid #334155}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>梯度下降完整可视化</h1>
+<p>统一目标 y=1 | 正输入 vs 负输入 → 导数正负相反 → 权重方向相反</p>
+</div>
+
+<!-- Tab bar -->
+<div class="tabs">
+<div class="tab active" id="tab0" onclick="switchTab(0)">
+  正输入 x=2 <span class="badge badge-neg">导数＜0 → w↑</span>
+</div>
+<div class="tab" id="tab1" onclick="switchTab(1)">
+  负输入 x=−2 <span class="badge badge-pos">导数＞0 → w↓</span>
+</div>
+</div>
+
+<div class="main-panel" id="mainPanel">
+<div class="scenario-desc" id="scenarioDesc"></div>
+<div class="key-diff" id="keyDiff"></div>
+
+<div class="row">
+<div><canvas id="cvLoss" width="480" height="370"></canvas></div>
+<div><canvas id="cvSig" width="420" height="370"></canvas></div>
+</div>
+
+<div class="step-bar">
+<button class="btn" onclick="goStep(-1)">◀ 上一步</button>
+<span id="stepLabel" style="color:#94a3b8;font-size:13px;min-width:120px;text-align:center">迭代 0 / 0</span>
+<button class="btn" onclick="goStep(1)">下一步 ▶</button>
+<button class="btn" id="btnAuto" onclick="toggleAuto()">▶ 自动播放</button>
+<button class="btn" onclick="goStep(-curStep)">⏮ 回到起点</button>
+</div>
+
+<div class="info-row">
+<div class="card chain-card" style="width:920px">
+<h3 id="chainTitle">链式求导过程（当前迭代）</h3>
+<div id="chainContent" class="mono" style="font-size:12px;line-height:1.9"></div>
+</div>
+</div>
+
+<div class="info-row">
+<div class="card" style="width:920px">
+<h3>全部迭代记录</h3>
+<div style="overflow-x:auto;max-height:220px;overflow-y:auto">
+<table><thead id="tblHead"></thead><tbody id="tbl"></tbody></table>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+const sigmoid=z=>1/(1+Math.exp(-z));
+
+// ===== Three scenarios =====
+const scenarios=[
+  {
+    name:'正输入 x=2：导数为负，w 增大',
+    x:2, y:1, b:0, w0:0.5, alpha:0.5, n:30,
+    desc:'<b>目标 y=1</b>，输入 <span class="hl-b">x=2（正）</span>，初始 w₀=0.5 → z=1, ŷ=0.73 偏低 → 链式求导中 dz/dw=<span class="hl-b">+2</span> → 导数<span class="hl-g">为负</span> → 权重<span class="hl-g">增大</span>',
+    diffs:[
+      {label:'目标',val:'y = 1',color:'#4ade80'},
+      {label:'输入',val:'x = 2（正）',color:'#60a5fa'},
+      {label:'初始权重',val:'w₀ = 0.5',color:'#60a5fa'},
+      {label:'dz/dw',val:'x = +2',color:'#60a5fa'},
+      {label:'导数符号',val:'dL/dw < 0',color:'#4ade80'},
+      {label:'权重方向',val:'w 增大 →',color:'#4ade80'}
+    ],
+    lossLabel:'L=(ŷ-1)²',
+    wRange:[-1.5,3.5], lRange:[-0.02,0.35]
+  },
+  {
+    name:'负输入 x=-2：导数为正，w 减小',
+    x:-2, y:1, b:0, w0:0.5, alpha:0.5, n:30,
+    desc:'<b>目标 y=1</b>，输入 <span class="hl-r">x=-2（负）</span>，初始 w₀=0.5 → z=-1, ŷ=0.27 偏低 → 链式求导中 dz/dw=<span class="hl-r">-2</span> 翻转符号 → 导数<span class="hl-r">为正</span> → 权重<span class="hl-r">减小</span>（变负后 z 变大 → ŷ 向 1 靠近）',
+    diffs:[
+      {label:'目标',val:'y = 1',color:'#4ade80'},
+      {label:'输入',val:'x = −2（负）',color:'#f87171'},
+      {label:'初始权重',val:'w₀ = 0.5',color:'#60a5fa'},
+      {label:'dz/dw',val:'x = −2',color:'#f87171'},
+      {label:'导数符号',val:'dL/dw > 0',color:'#f87171'},
+      {label:'权重方向',val:'← w 减小',color:'#f87171'}
+    ],
+    lossLabel:'L=(ŷ-1)²',
+    wRange:[-2.5,1.5], lRange:[-0.02,0.65]
+  }
+];
+
+// Pre-compute all iterations for all scenarios
+const allIters=scenarios.map(sc=>{
+  const arr=[];
+  let w=sc.w0;
+  for(let i=0;i<sc.n;i++){
+    const z=w*sc.x+sc.b;
+    const yhat=sigmoid(z);
+    const L=(yhat-sc.y)**2;
+    const dL_dyhat=2*(yhat-sc.y);
+    const dyhat_dz=yhat*(1-yhat);
+    const dz_dw=sc.x;
+    const dL_dw=dL_dyhat*dyhat_dz*dz_dw;
+    const wNew=w-sc.alpha*dL_dw;
+    arr.push({i,w,z,yhat,L,dL_dyhat,dyhat_dz,dz_dw,dL_dw,wNew});
+    w=wNew;
+  }
+  return arr;
+});
+
+// Pre-compute loss curves for each scenario
+const allLossCurves=scenarios.map(sc=>{
+  const arr=[];
+  const step=(sc.wRange[1]-sc.wRange[0])/250;
+  for(let ww=sc.wRange[0];ww<=sc.wRange[1];ww+=step){
+    const zz=ww*sc.x+sc.b;const yh=sigmoid(zz);const ll=(yh-sc.y)**2;
+    arr.push({w:ww,L:ll});
+  }
+  return arr;
+});
+
+let activeTab=0;
+let curStep=0;
+let autoTimer=null;
+
+function switchTab(idx){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btnAuto').textContent='▶ 自动播放';}
+  activeTab=idx;
+  curStep=0;
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===idx));
+  render();
+}
+
+// ===== Drawing =====
+const cvL=document.getElementById('cvLoss'),ctxL=cvL.getContext('2d');
+const cvS=document.getElementById('cvSig'),ctxS=cvS.getContext('2d');
+const LW=480,LH=370,LM={l:55,r:20,t:30,b:45};
+const LPW=LW-LM.l-LM.r,LPH=LH-LM.t-LM.b;
+const SW=420,SH=370,SM={l:50,r:15,t:30,b:45};
+const SPW=SW-SM.l-SM.r,SPH=SH-SM.t-SM.b;
+
+function drawLossCanvas(){
+  const sc=scenarios[activeTab];
+  const iters=allIters[activeTab];
+  const lossCurve=allLossCurves[activeTab];
+  const [wMin,wMax]=sc.wRange;
+  const [lMin,lMax]=sc.lRange;
+  const w2x=v=>LM.l+(v-wMin)/(wMax-wMin)*LPW;
+  const l2y=v=>LM.t+(1-(v-lMin)/(lMax-lMin))*LPH;
+
+  ctxL.fillStyle='#0d1117';ctxL.fillRect(0,0,LW,LH);
+  // Grid
+  ctxL.strokeStyle='#151d2e';ctxL.lineWidth=0.5;
+  const wStep=Math.max(0.5,Math.round((wMax-wMin)/10*2)/2);
+  for(let ww=Math.ceil(wMin/wStep)*wStep;ww<=wMax;ww+=wStep){
+    const px=w2x(ww);ctxL.beginPath();ctxL.moveTo(px,LM.t);ctxL.lineTo(px,LM.t+LPH);ctxL.stroke();
+  }
+  const lStep=lMax>0.5?0.1:0.05;
+  for(let ll=0;ll<=lMax;ll+=lStep){
+    const py=l2y(ll);ctxL.beginPath();ctxL.moveTo(LM.l,py);ctxL.lineTo(LM.l+LPW,py);ctxL.stroke();
+  }
+  ctxL.strokeStyle='#334155';ctxL.lineWidth=1;
+  const y0=l2y(0);ctxL.beginPath();ctxL.moveTo(LM.l,y0);ctxL.lineTo(LM.l+LPW,y0);ctxL.stroke();
+
+  // Axis labels
+  ctxL.fillStyle='#8b9dc3';ctxL.font='11px monospace';ctxL.textAlign='center';ctxL.textBaseline='top';
+  for(let ww=Math.ceil(wMin/wStep)*wStep;ww<=wMax;ww+=wStep){
+    ctxL.fillText(ww.toFixed(1),w2x(ww),LM.t+LPH+6);
+  }
+  ctxL.textAlign='right';ctxL.textBaseline='middle';
+  for(let ll=0;ll<=lMax;ll+=lStep){ctxL.fillText(ll.toFixed(2),LM.l-6,l2y(ll))}
+
+  ctxL.fillStyle='#60a5fa';ctxL.font='bold 13px sans-serif';ctxL.textAlign='center';
+  ctxL.fillText('权重 w',LM.l+LPW/2,LH-6);
+  '损失 L'.split('').forEach((ch,i)=>{
+    ctxL.font='bold 12px sans-serif';ctxL.textBaseline='middle';
+    ctxL.fillText(ch,12,LM.t+LPH/2-32+i*16);
+  });
+
+  ctxL.fillStyle='#f1f5f9';ctxL.font='bold 14px sans-serif';ctxL.textAlign='center';
+  ctxL.fillText('损失函数 L(w) 曲线',LW/2,16);
+
+  // Loss curve
+  ctxL.strokeStyle='#475569';ctxL.lineWidth=2;ctxL.beginPath();
+  lossCurve.forEach((p,i)=>{
+    const px=w2x(p.w),py=l2y(Math.min(p.L,lMax));
+    if(i===0)ctxL.moveTo(px,py);else ctxL.lineTo(px,py);
+  });
+  ctxL.stroke();
+
+  // Iteration trace
+  for(let i=0;i<=curStep&&i<iters.length;i++){
+    const it=iters[i];
+    const px=w2x(Math.max(wMin,Math.min(wMax,it.w)));
+    const py=l2y(Math.max(lMin,Math.min(lMax,it.L)));
+
+    if(i<curStep){
+      ctxL.beginPath();ctxL.arc(px,py,4,0,Math.PI*2);
+      ctxL.fillStyle='#334155';ctxL.fill();
+      ctxL.strokeStyle='#60a5fa';ctxL.lineWidth=1;ctxL.stroke();
+      if(i+1<=curStep){
+        const it2=iters[i+1];
+        const nx=w2x(Math.max(wMin,Math.min(wMax,it2.w)));
+        const ny=l2y(Math.max(lMin,Math.min(lMax,it2.L)));
+        ctxL.strokeStyle='#1e40af';ctxL.lineWidth=1;ctxL.setLineDash([3,3]);
+        ctxL.beginPath();ctxL.moveTo(px,py);ctxL.lineTo(nx,ny);ctxL.stroke();
+        ctxL.setLineDash([]);
+      }
+    }
+
+    if(i===curStep){
+      ctxL.beginPath();ctxL.arc(px,py,7,0,Math.PI*2);
+      ctxL.fillStyle='#fbbf24';ctxL.fill();
+      ctxL.strokeStyle='#fff';ctxL.lineWidth=2;ctxL.stroke();
+
+      // Tangent
+      const slope=it.dL_dw;
+      const tLen=Math.min(0.6,(wMax-wMin)*0.08);
+      const x1=it.w-tLen,x2=it.w+tLen;
+      const l1=it.L+slope*(-tLen),l2=it.L+slope*(tLen);
+      ctxL.strokeStyle=slope<0?'#4ade80':'#f87171';ctxL.lineWidth=2.5;
+      ctxL.beginPath();
+      ctxL.moveTo(w2x(Math.max(wMin,x1)),l2y(Math.max(lMin,Math.min(lMax,l1))));
+      ctxL.lineTo(w2x(Math.min(wMax,x2)),l2y(Math.max(lMin,Math.min(lMax,l2))));
+      ctxL.stroke();
+
+      // Direction arrow
+      const arrowDir=slope<0?1:-1;
+      const ax=px+arrowDir*45,ay=py-28;
+      ctxL.fillStyle=slope<0?'#4ade80':'#f87171';ctxL.font='bold 18px sans-serif';ctxL.textAlign='center';
+      if(ax>LM.l+10&&ax<LM.l+LPW-10)
+        ctxL.fillText(arrowDir>0?'→ w↑':'← w↓',ax,ay);
+
+      // Labels
+      const lbx=px<LM.l+LPW/2?px+10:px-120;
+      ctxL.fillStyle='#fbbf24';ctxL.font='bold 11px monospace';ctxL.textAlign='left';
+      ctxL.fillText('w='+it.w.toFixed(3),lbx,py-14);
+      ctxL.fillText('L='+it.L.toFixed(4),lbx,py);
+      ctxL.fillStyle=slope<0?'#4ade80':'#f87171';
+      ctxL.fillText('斜率='+it.dL_dw.toFixed(4),lbx,py+14);
+    }
+  }
+
+  ctxL.fillStyle='#94a3b8';ctxL.font='11px sans-serif';ctxL.textAlign='left';
+  ctxL.fillText('🟡 当前位置',LM.l+5,LM.t+12);
+  ctxL.fillText('— 切线(导数=斜率)',LM.l+5,LM.t+26);
+}
+
+function drawSigCanvas(){
+  const sc=scenarios[activeTab];
+  const iters=allIters[activeTab];
+  const zMin=-4,zMax=6,yMin=-0.1,yMax=1.15;
+  const z2x=v=>SM.l+(v-zMin)/(zMax-zMin)*SPW;
+  const y2y=v=>SM.t+(1-(v-yMin)/(yMax-yMin))*SPH;
+
+  ctxS.fillStyle='#0d1117';ctxS.fillRect(0,0,SW,SH);
+  ctxS.strokeStyle='#151d2e';ctxS.lineWidth=0.5;
+  for(let zz=-4;zz<=6;zz++){
+    const px=z2x(zz);ctxS.beginPath();ctxS.moveTo(px,SM.t);ctxS.lineTo(px,SM.t+SPH);ctxS.stroke();
+  }
+  for(let yy=0;yy<=1;yy+=0.2){
+    const py=y2y(yy);ctxS.beginPath();ctxS.moveTo(SM.l,py);ctxS.lineTo(SM.l+SPW,py);ctxS.stroke();
+  }
+
+  // Target line
+  const targetColor='#22c55e40';
+  const targetLabelColor='#4ade80';
+  ctxS.strokeStyle=targetColor;ctxS.lineWidth=1.5;ctxS.setLineDash([5,3]);
+  const pyT=y2y(sc.y);ctxS.beginPath();ctxS.moveTo(SM.l,pyT);ctxS.lineTo(SM.l+SPW,pyT);ctxS.stroke();
+  ctxS.setLineDash([]);
+  ctxS.fillStyle=targetLabelColor;ctxS.font='bold 11px sans-serif';ctxS.textAlign='left';
+  ctxS.fillText('目标 y='+sc.y,SM.l+SPW-70,pyT+(sc.y>0.5?12:-7));
+
+  // Axis labels
+  ctxS.fillStyle='#8b9dc3';ctxS.font='11px monospace';ctxS.textAlign='center';ctxS.textBaseline='top';
+  for(let zz=-4;zz<=6;zz+=2){ctxS.fillText(zz,z2x(zz),SM.t+SPH+6)}
+  ctxS.textAlign='right';ctxS.textBaseline='middle';
+  for(let yy=0;yy<=1;yy+=0.2){ctxS.fillText(yy.toFixed(1),SM.l-6,y2y(yy))}
+
+  ctxS.fillStyle='#60a5fa';ctxS.font='bold 13px sans-serif';ctxS.textAlign='center';
+  ctxS.fillText('z = w·x + b',SM.l+SPW/2,SH-6);
+  'ŷ=σ(z)'.split('').forEach((ch,i)=>{
+    ctxS.font='bold 11px sans-serif';ctxS.textBaseline='middle';
+    ctxS.fillText(ch,10,SM.t+SPH/2-42+i*14);
+  });
+
+  ctxS.fillStyle='#f1f5f9';ctxS.font='bold 14px sans-serif';ctxS.textAlign='center';
+  ctxS.fillText('Sigmoid 曲线上的位置',SW/2,16);
+
+  // Sigmoid curve
+  ctxS.strokeStyle='#c084fc';ctxS.lineWidth=2;ctxS.beginPath();
+  for(let zz=zMin;zz<=zMax;zz+=0.05){
+    const px=z2x(zz),py=y2y(sigmoid(zz));
+    if(zz===zMin)ctxS.moveTo(px,py);else ctxS.lineTo(px,py);
+  }
+  ctxS.stroke();
+
+  // Iteration trace
+  for(let i=0;i<=curStep&&i<iters.length;i++){
+    const it=iters[i];
+    const cz=Math.max(zMin,Math.min(zMax,it.z));
+    const px=z2x(cz),py=y2y(it.yhat);
+
+    if(i<curStep){
+      ctxS.beginPath();ctxS.arc(px,py,3,0,Math.PI*2);
+      ctxS.fillStyle='#475569';ctxS.fill();
+      if(i+1<=curStep){
+        const it2=iters[i+1];
+        const cz2=Math.max(zMin,Math.min(zMax,it2.z));
+        ctxS.strokeStyle='#4c1d95';ctxS.lineWidth=1;ctxS.setLineDash([2,2]);
+        ctxS.beginPath();ctxS.moveTo(px,py);ctxS.lineTo(z2x(cz2),y2y(it2.yhat));ctxS.stroke();
+        ctxS.setLineDash([]);
+      }
+    }
+
+    if(i===curStep){
+      ctxS.beginPath();ctxS.arc(px,py,7,0,Math.PI*2);
+      ctxS.fillStyle='#fbbf24';ctxS.fill();
+      ctxS.strokeStyle='#fff';ctxS.lineWidth=2;ctxS.stroke();
+
+      // Dotted lines to axes
+      ctxS.strokeStyle='#fbbf2480';ctxS.lineWidth=1;ctxS.setLineDash([3,3]);
+      ctxS.beginPath();ctxS.moveTo(px,py);ctxS.lineTo(px,SM.t+SPH);ctxS.stroke();
+      ctxS.beginPath();ctxS.moveTo(px,py);ctxS.lineTo(SM.l,py);ctxS.stroke();
+      ctxS.setLineDash([]);
+
+      // Tangent on sigmoid
+      const dydz=it.dyhat_dz;
+      const ext=1.0;
+      const z1=it.z-ext,z2s=it.z+ext;
+      const y1s=it.yhat+dydz*(-ext),y2s=it.yhat+dydz*(ext);
+      ctxS.strokeStyle='#fb923c';ctxS.lineWidth=2;
+      ctxS.beginPath();
+      ctxS.moveTo(z2x(Math.max(zMin,z1)),y2y(Math.max(yMin,Math.min(yMax,y1s))));
+      ctxS.lineTo(z2x(Math.min(zMax,z2s)),y2y(Math.max(yMin,Math.min(yMax,y2s))));
+      ctxS.stroke();
+
+      // Gap to target
+      const targetPy=y2y(sc.y);
+      const gapPx=Math.abs(py-targetPy);
+      if(gapPx>5){
+        ctxS.strokeStyle='#f8717180';ctxS.lineWidth=2;
+        const gx=px+(px<SM.l+SPW/2?15:-15);
+        ctxS.beginPath();ctxS.moveTo(gx,py);ctxS.lineTo(gx,targetPy);ctxS.stroke();
+        ctxS.fillStyle='#f87171';ctxS.font='bold 10px monospace';ctxS.textAlign='left';
+        ctxS.fillText('差'+Math.abs(it.yhat-sc.y).toFixed(3),gx+5,(py+targetPy)/2);
+      }
+
+      // Labels
+      const lx=px<SM.l+SPW*0.6?Math.min(px+10,SW-100):px-110;
+      const ly=Math.max(py-30,SM.t+10);
+      ctxS.fillStyle='#fbbf24';ctxS.font='bold 11px monospace';ctxS.textAlign='left';
+      ctxS.fillText('z='+it.z.toFixed(3),lx,ly);
+      ctxS.fillText('ŷ='+it.yhat.toFixed(4),lx,ly+14);
+      ctxS.fillStyle='#fb923c';
+      ctxS.fillText("σ'="+it.dyhat_dz.toFixed(4),lx,ly+28);
+    }
+  }
+}
+
+function updateChain(){
+  const sc=scenarios[activeTab];
+  const it=allIters[activeTab][curStep];
+  const dirColor=it.dL_dw<0?'hl-g':'hl-r';
+  const dirText=it.dL_dw<0?'w 应该增大 ↑':'w 应该减小 ↓';
+  const absColor=Math.abs(it.dL_dw)<0.001?'hl-y':dirColor;
+  const absText=Math.abs(it.dL_dw)<0.001?'≈ 收敛，几乎不动':dirText;
+
+  document.getElementById('chainContent').innerHTML=`
+<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+<div style="flex:1;min-width:280px">
+<b>① 前向传播</b><br>
+z = w × x + b = <span class="hl-b">${it.w.toFixed(3)}</span> × ${sc.x} + ${sc.b} = <span class="hl-b">${it.z.toFixed(3)}</span><br>
+ŷ = σ(${it.z.toFixed(3)}) = <span class="hl-p">${it.yhat.toFixed(4)}</span><br>
+L = (ŷ - y)² = (${it.yhat.toFixed(4)} - ${sc.y})² = <span class="hl-r">${it.L.toFixed(4)}</span>
+</div>
+<div style="flex:1;min-width:300px">
+<b>② 链式求导</b><br>
+dL/dŷ = 2(ŷ - y) = 2×(${it.yhat.toFixed(4)}-${sc.y}) = <span class="hl-y">${it.dL_dyhat.toFixed(4)}</span><br>
+dŷ/dz = ŷ(1-ŷ) = ${it.yhat.toFixed(4)}×${(1-it.yhat).toFixed(4)} = <span class="hl-y">${it.dyhat_dz.toFixed(4)}</span><br>
+dz/dw = x = <span class="hl-y">${sc.x}</span><br>
+<b>dL/dw</b> = ${it.dL_dyhat.toFixed(4)} × ${it.dyhat_dz.toFixed(4)} × ${sc.x} = <span class="${dirColor}">${it.dL_dw.toFixed(4)}</span>
+</div>
+<div style="flex:1;min-width:240px">
+<b>③ 更新权重</b> (α=${sc.alpha})<br>
+w_new = w - α × dL/dw<br>
+= ${it.w.toFixed(3)} - ${sc.alpha} × (${it.dL_dw.toFixed(4)})<br>
+= ${it.w.toFixed(3)} ${it.dL_dw<0?'+ '+(-sc.alpha*it.dL_dw).toFixed(4):'- '+(sc.alpha*it.dL_dw).toFixed(4)}<br>
+= <span class="hl-g">${it.wNew.toFixed(4)}</span><br>
+<b style="font-size:13px"><span class="${absColor}">→ ${absText}</span></b>
+</div>
+</div>`;
+}
+
+function updateTable(){
+  const sc=scenarios[activeTab];
+  const iters=allIters[activeTab];
+  document.getElementById('tblHead').innerHTML=`<tr>
+<th>迭代</th><th>w</th><th>z=w×${sc.x}</th><th>ŷ=σ(z)</th><th>${sc.lossLabel}</th>
+<th>dL/dŷ</th><th>dŷ/dz</th><th>dz/dw</th><th>dL/dw</th><th>方向</th><th>w_new</th></tr>`;
+
+  const tbody=document.getElementById('tbl');
+  tbody.innerHTML='';
+  for(let i=0;i<=curStep&&i<iters.length;i++){
+    const it=iters[i];
+    const isCur=i===curStep;
+    const cls=isCur?' class="cur"':'';
+    const dir=it.dL_dw<0?'<span style="color:#4ade80">w↑</span>':
+              it.dL_dw>0?'<span style="color:#f87171">w↓</span>':
+              '<span style="color:#fbbf24">≈0</span>';
+    tbody.innerHTML+=`<tr${isCur?' style="background:#0f172a"':''}>
+<td${cls}>${it.i}</td><td${cls}>${it.w.toFixed(3)}</td><td${cls}>${it.z.toFixed(3)}</td>
+<td${cls}>${it.yhat.toFixed(4)}</td><td${cls}>${it.L.toFixed(4)}</td>
+<td${cls}>${it.dL_dyhat.toFixed(4)}</td><td${cls}>${it.dyhat_dz.toFixed(4)}</td>
+<td${cls}>${it.dz_dw}</td><td${cls}>${it.dL_dw.toFixed(4)}</td>
+<td${cls}>${dir}</td><td${cls}>${it.wNew.toFixed(4)}</td></tr>`;
+  }
+}
+
+function updateScenarioInfo(){
+  const sc=scenarios[activeTab];
+  document.getElementById('scenarioDesc').innerHTML=sc.desc;
+  document.getElementById('keyDiff').innerHTML=sc.diffs.map(d=>
+    `<div class="kd-item"><span style="color:#64748b">${d.label}</span><br><b style="color:${d.color};font-size:14px">${d.val}</b></div>`
+  ).join('');
+}
+
+function render(){
+  updateScenarioInfo();
+  drawLossCanvas();
+  drawSigCanvas();
+  updateChain();
+  updateTable();
+  document.getElementById('stepLabel').textContent=`迭代 ${curStep} / ${allIters[activeTab].length-1}`;
+}
+
+function goStep(d){
+  curStep=Math.max(0,Math.min(allIters[activeTab].length-1,curStep+d));
+  render();
+}
+
+function toggleAuto(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btnAuto').textContent='▶ 自动播放';return}
+  document.getElementById('btnAuto').textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    if(curStep>=allIters[activeTab].length-1){clearInterval(autoTimer);autoTimer=null;document.getElementById('btnAuto').textContent='▶ 自动播放';return}
+    curStep++;render();
+  },700);
+}
+
+// Auto-select tab and step from URL params (e.g. ?tab=1&step=5)
+const params=new URLSearchParams(location.search);
+const pTab=params.get('tab'), pStep=params.get('step');
+if(pTab!==null) switchTab(parseInt(pTab));
+else render();
+if(pStep!==null){curStep=Math.min(parseInt(pStep),allIters[activeTab].length-1);render();}
+</script>
+</body>
+</html>

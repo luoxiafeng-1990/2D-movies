@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>为什么要归一化 — 梯度下降的生死差别</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e1a;color:#e2e8f0;overflow-x:hidden}
+.header{text-align:center;padding:14px 20px 6px;background:#0f1628}
+.header h1{font-size:22px;color:#60a5fa}
+.header p{color:#64748b;font-size:12px;margin-top:2px}
+.duo{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;padding:8px 10px}
+.panel{background:#111827;border:1px solid #1e293b;border-radius:10px;padding:10px;width:470px}
+.panel h2{font-size:14px;text-align:center;margin-bottom:6px;padding:4px 0;border-radius:6px}
+.panel.bad h2{color:#f87171;background:#1c1017;border:1px solid #7f1d1d}
+.panel.good h2{color:#4ade80;background:#0c1a12;border:1px solid #064e3b}
+canvas{border-radius:8px;border:1px solid #1e293b;background:#0d1117;display:block;margin:0 auto}
+.card{background:#0d1117;border:1px solid #1e293b;border-radius:8px;padding:8px;font-size:11px;line-height:1.7;margin-top:6px}
+.card h3{font-size:10px;color:#3b82f6;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px}
+.mono{font-family:monospace}
+.hl-b{color:#60a5fa;font-weight:700}
+.hl-r{color:#f87171;font-weight:700}
+.hl-g{color:#4ade80;font-weight:700}
+.hl-y{color:#fbbf24;font-weight:700}
+.hl-p{color:#c084fc;font-weight:700}
+.hl-o{color:#fb923c;font-weight:700}
+.step-bar{display:flex;justify-content:center;align-items:center;gap:8px;padding:8px}
+.btn{padding:6px 16px;border:1px solid #334155;border-radius:5px;background:#1e293b;color:#e2e8f0;font-size:12px;cursor:pointer;transition:.15s}
+.btn:hover{background:#334155;border-color:#60a5fa}
+table{width:100%;border-collapse:collapse;font-size:10px;font-family:monospace;margin-top:4px}
+th{background:#1e293b;color:#94a3b8;padding:3px 2px;text-align:center;border:1px solid #2d3748;font-weight:600}
+td{padding:3px 2px;text-align:center;border:1px solid #1e293b}
+td.cur{background:#1e3a5f;color:#93c5fd;font-weight:700}
+td.dead{background:#2d1010;color:#f87171;font-weight:700}
+.summary{text-align:center;padding:6px 10px;font-size:13px;line-height:1.8}
+.tag{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700;margin:0 3px}
+.tag-r{background:#7f1d1d;color:#fca5a5}
+.tag-g{background:#064e3b;color:#6ee7b7}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>为什么要归一化？</h1>
+<p>同一个像素值 200，同一个初始权重 w₀=0.01，同一个学习率 α=0.5 — 唯一区别：输入是否归一化</p>
+</div>
+
+<div class="summary">
+  归一化的核心：链式求导中 <span class="hl-y">dz/dw = x</span>，
+  <span class="tag tag-r">x=200</span> 让梯度放大 200 倍 →
+  <span class="tag tag-g">x=0.784</span> 让梯度保持温和
+</div>
+
+<div class="step-bar">
+<button class="btn" onclick="goStep(-1)">◀ 上一步</button>
+<span id="stepLabel" style="color:#94a3b8;font-size:13px;min-width:100px;text-align:center">迭代 0</span>
+<button class="btn" onclick="goStep(1)">下一步 ▶</button>
+<button class="btn" id="btnAuto" onclick="toggleAuto()">▶ 自动播放</button>
+<button class="btn" onclick="goStep(-curStep)">⏮ 重置</button>
+</div>
+
+<div class="duo">
+<!-- BAD: no normalization -->
+<div class="panel bad">
+<h2>❌ 不归一化：x = 200（原始像素值）</h2>
+<canvas id="cvBad" width="450" height="280"></canvas>
+<div class="card">
+<h3>链式求导</h3>
+<div id="chainBad" class="mono" style="font-size:11px;line-height:1.8"></div>
+</div>
+<div class="card">
+<h3>迭代记录</h3>
+<div style="overflow-x:auto;max-height:130px;overflow-y:auto">
+<table><thead><tr>
+<th>迭代</th><th>w</th><th>z</th><th>ŷ</th><th>L</th><th>dL/dw</th><th>w_new</th><th>状态</th>
+</tr></thead><tbody id="tblBad"></tbody></table>
+</div>
+</div>
+</div>
+
+<!-- GOOD: normalized -->
+<div class="panel good">
+<h2>✅ 归一化后：x = 200/255 ≈ 0.784</h2>
+<canvas id="cvGood" width="450" height="280"></canvas>
+<div class="card">
+<h3>链式求导</h3>
+<div id="chainGood" class="mono" style="font-size:11px;line-height:1.8"></div>
+</div>
+<div class="card">
+<h3>迭代记录</h3>
+<div style="overflow-x:auto;max-height:130px;overflow-y:auto">
+<table><thead><tr>
+<th>迭代</th><th>w</th><th>z</th><th>ŷ</th><th>L</th><th>dL/dw</th><th>w_new</th><th>状态</th>
+</tr></thead><tbody id="tblGood"></tbody></table>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Bottom explanation -->
+<div class="duo">
+<div class="panel bad" style="width:470px">
+<div class="card">
+<h3>为什么训练"死"了？</h3>
+<div class="mono" style="font-size:11px;line-height:1.8">
+z = w × <span class="hl-r">200</span> 太大 → sigmoid 完全饱和<br>
+σ(500) = 1.00000000（完全等于 1）<br>
+σ'(500) = 1×(1-1) = <span class="hl-r">0</span><br>
+dL/dw = ... × <span class="hl-r">0</span> × ... = <span class="hl-r">0</span><br>
+梯度为 0 → 权重无法更新 → <span class="hl-r">永远卡住</span>
+</div>
+</div>
+</div>
+<div class="panel good" style="width:470px">
+<div class="card">
+<h3>为什么训练"活"着？</h3>
+<div class="mono" style="font-size:11px;line-height:1.8">
+z = w × <span class="hl-g">0.784</span> 很小 → sigmoid 在活跃区域<br>
+σ(0.08) = 0.52（中间地带）<br>
+σ'(0.08) = 0.52×0.48 = <span class="hl-g">0.25</span><br>
+dL/dw = ... × <span class="hl-g">0.25</span> × ... = 合理值<br>
+梯度健康 → 权重稳步更新 → <span class="hl-g">持续学习</span>
+</div>
+</div>
+</div>
+</div>
+
+<script>
+const sigmoid=z=>1/(1+Math.exp(-z));
+const Y=1, ALPHA=0.5, W0=0.01;
+
+function computeIters(x, n){
+  const arr=[];
+  let w=W0;
+  for(let i=0;i<n;i++){
+    const z=w*x;
+    const yhat=sigmoid(z);
+    const L=(yhat-Y)**2;
+    const dL_dyhat=2*(yhat-Y);
+    const dyhat_dz=yhat*(1-yhat);
+    const dz_dw=x;
+    const dL_dw=dL_dyhat*dyhat_dz*dz_dw;
+    const wNew=w-ALPHA*dL_dw;
+    const dead=Math.abs(dL_dw)<1e-10 && i>0;
+    arr.push({i,w,z,yhat,L,dL_dyhat,dyhat_dz,dz_dw,dL_dw,wNew,dead});
+    w=wNew;
+  }
+  return arr;
+}
+
+const itersBad=computeIters(200, 20);
+const itersGood=computeIters(200/255, 30);
+
+let curStep=0;
+let autoTimer=null;
+const maxStep=Math.max(itersBad.length, itersGood.length)-1;
+
+// ===== Canvas drawing =====
+function drawSigmoidCanvas(cvId, iters, step, xVal, panelType){
+  const cv=document.getElementById(cvId), ctx=cv.getContext('2d');
+  const W=450,H=280;
+  const M={l:50,r:15,t:25,b:40};
+  const PW=W-M.l-M.r, PH=H-M.t-M.b;
+
+  const zMin=-6,zMax=6,yMin=-0.08,yMax=1.12;
+  const z2x=v=>M.l+(v-zMin)/(zMax-zMin)*PW;
+  const y2y=v=>M.t+(1-(v-yMin)/(yMax-yMin))*PH;
+
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='#151d2e';ctx.lineWidth=0.5;
+  for(let z=-6;z<=6;z+=2){
+    const px=z2x(z);ctx.beginPath();ctx.moveTo(px,M.t);ctx.lineTo(px,M.t+PH);ctx.stroke();
+  }
+  for(let y=0;y<=1;y+=0.2){
+    const py=y2y(y);ctx.beginPath();ctx.moveTo(M.l,py);ctx.lineTo(M.l+PW,py);ctx.stroke();
+  }
+
+  // Target y=1
+  ctx.strokeStyle='#22c55e40';ctx.lineWidth=1.5;ctx.setLineDash([5,3]);
+  const py1=y2y(1);ctx.beginPath();ctx.moveTo(M.l,py1);ctx.lineTo(M.l+PW,py1);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#4ade80';ctx.font='bold 10px sans-serif';ctx.textAlign='left';
+  ctx.fillText('目标 y=1',M.l+PW-55,py1+12);
+
+  // Axis labels
+  ctx.fillStyle='#8b9dc3';ctx.font='10px monospace';ctx.textAlign='center';ctx.textBaseline='top';
+  for(let z=-6;z<=6;z+=2) ctx.fillText(z,z2x(z),M.t+PH+4);
+  ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let y=0;y<=1;y+=0.2) ctx.fillText(y.toFixed(1),M.l-4,y2y(y));
+
+  ctx.fillStyle='#60a5fa';ctx.font='bold 11px sans-serif';ctx.textAlign='center';
+  ctx.fillText('z = w × '+xVal.toFixed(xVal>=1?0:3),M.l+PW/2,H-6);
+  ctx.font='bold 10px sans-serif';
+  'ŷ=σ(z)'.split('').forEach((ch,i)=>{
+    ctx.textBaseline='middle';ctx.fillText(ch,8,M.t+PH/2-35+i*12);
+  });
+
+  ctx.fillStyle='#f1f5f9';ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+  const title=panelType==='bad'?'Sigmoid 曲线（x=200 不归一化）':'Sigmoid 曲线（x≈0.784 归一化后）';
+  ctx.fillText(title,W/2,14);
+
+  // Sigmoid curve
+  ctx.strokeStyle='#c084fc';ctx.lineWidth=2;ctx.beginPath();
+  for(let z=zMin;z<=zMax;z+=0.04){
+    const px=z2x(z),py=y2y(sigmoid(z));
+    if(z===zMin)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  ctx.stroke();
+
+  // Highlight active zone
+  ctx.fillStyle='#4ade8010';
+  ctx.fillRect(z2x(-4),M.t,z2x(4)-z2x(-4),PH);
+  ctx.fillStyle='#4ade8030';ctx.font='9px sans-serif';ctx.textAlign='center';
+  ctx.fillText('活跃区域（梯度有效）',z2x(0),M.t+PH-8);
+
+  // Saturation zones
+  ctx.fillStyle='#f8717110';
+  ctx.fillRect(M.l,M.t,z2x(-4)-M.l,PH);
+  ctx.fillRect(z2x(4),M.t,M.l+PW-z2x(4),PH);
+
+  // Draw points
+  const s=Math.min(step, iters.length-1);
+  for(let i=0;i<=s;i++){
+    const it=iters[i];
+    const clampZ=Math.max(zMin,Math.min(zMax,it.z));
+    const px=z2x(clampZ), py=y2y(it.yhat);
+
+    if(i<s){
+      ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);
+      ctx.fillStyle='#475569';ctx.fill();
+      if(i+1<=s){
+        const it2=iters[i+1];
+        const cz2=Math.max(zMin,Math.min(zMax,it2.z));
+        ctx.strokeStyle='#4c1d95';ctx.lineWidth=1;ctx.setLineDash([2,2]);
+        ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(z2x(cz2),y2y(it2.yhat));ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    if(i===s){
+      // For bad panel, if z is way out of range, show arrow
+      if(it.z>zMax+2){
+        const arrowX=M.l+PW-5, arrowY=y2y(1);
+        ctx.fillStyle='#f87171';ctx.font='bold 14px sans-serif';ctx.textAlign='right';
+        ctx.fillText('z='+it.z.toFixed(0)+' →→→ 饱和！',arrowX-5,arrowY+20);
+        ctx.beginPath();ctx.arc(M.l+PW-5,y2y(1),7,0,Math.PI*2);
+        ctx.fillStyle='#f87171';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+
+        ctx.fillStyle='#f87171';ctx.font='bold 11px sans-serif';
+        ctx.fillText('σ\'≈0 梯度消失！',arrowX-5,arrowY+36);
+      } else {
+        ctx.beginPath();ctx.arc(px,py,7,0,Math.PI*2);
+        ctx.fillStyle='#fbbf24';ctx.fill();
+        ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+
+        // Gap to y=1
+        const targetPy=y2y(1);
+        if(Math.abs(py-targetPy)>5){
+          ctx.strokeStyle='#f8717180';ctx.lineWidth=2;
+          const gx=px+12;
+          ctx.beginPath();ctx.moveTo(gx,py);ctx.lineTo(gx,targetPy);ctx.stroke();
+          ctx.fillStyle='#f87171';ctx.font='bold 9px monospace';ctx.textAlign='left';
+          ctx.fillText('差'+Math.abs(it.yhat-1).toFixed(3),gx+4,(py+targetPy)/2);
+        }
+
+        // Labels
+        const lx=px<M.l+PW*0.5?px+12:px-90;
+        const ly=Math.max(py-24,M.t+5);
+        ctx.fillStyle='#fbbf24';ctx.font='bold 10px monospace';ctx.textAlign='left';
+        ctx.fillText('z='+it.z.toFixed(3),lx,ly);
+        ctx.fillText('ŷ='+it.yhat.toFixed(4),lx,ly+12);
+      }
+    }
+  }
+}
+
+function updateChain(elId, iters, step, xVal){
+  const s=Math.min(step, iters.length-1);
+  const it=iters[s];
+  const el=document.getElementById(elId);
+  if(it.dead){
+    el.innerHTML=`<span class="hl-r">⚠ 训练已死亡 — σ'≈0，梯度为 0，权重永远无法更新</span><br>
+z = ${it.w.toFixed(3)} × ${xVal>=1?xVal.toFixed(0):xVal.toFixed(3)} = <span class="hl-r">${it.z.toFixed(1)}</span> (巨大!)<br>
+ŷ = σ(${it.z.toFixed(1)}) = <span class="hl-r">${it.yhat.toFixed(8)}</span> (完全饱和)<br>
+dŷ/dz = ${it.yhat.toFixed(8)} × ${(1-it.yhat).toFixed(8)} = <span class="hl-r">${it.dyhat_dz.toExponential(2)}</span><br>
+dL/dw ≈ <span class="hl-r">0</span> → 训练停止`;
+    return;
+  }
+  const xStr=xVal>=1?xVal.toFixed(0):xVal.toFixed(3);
+  const dirColor=it.dL_dw<0?'hl-g':'hl-r';
+  el.innerHTML=`z = ${it.w.toFixed(4)} × ${xStr} = <span class="hl-b">${it.z.toFixed(3)}</span> | 
+ŷ = σ(${it.z.toFixed(3)}) = <span class="hl-p">${it.yhat.toFixed(4)}</span> | 
+L = <span class="hl-r">${it.L.toFixed(4)}</span><br>
+dL/dŷ=<span class="hl-y">${it.dL_dyhat.toFixed(4)}</span> × 
+dŷ/dz=<span class="hl-y">${it.dyhat_dz.toFixed(4)}</span> × 
+<b>dz/dw=<span class="hl-o">${xStr}</span></b> = 
+<span class="${dirColor}">${it.dL_dw.toFixed(4)}</span><br>
+w_new = ${it.w.toFixed(4)} - 0.5×(${it.dL_dw.toFixed(4)}) = <span class="hl-g">${it.wNew.toFixed(4)}</span>`;
+}
+
+function updateTable(tbId, iters, step){
+  const s=Math.min(step, iters.length-1);
+  const tbody=document.getElementById(tbId);
+  tbody.innerHTML='';
+  for(let i=0;i<=s;i++){
+    const it=iters[i];
+    const isCur=i===s;
+    const deadCls=it.dead?' dead':'';
+    const cls=isCur?(it.dead?' class="dead"':' class="cur"'):(it.dead?' class="dead"':'');
+    const status=it.dead?'<span style="color:#f87171">💀 死亡</span>':
+      it.L<0.01?'<span style="color:#4ade80">✓ 收敛</span>':
+      '<span style="color:#fbbf24">训练中</span>';
+    tbody.innerHTML+=`<tr>
+<td${cls}>${it.i}</td><td${cls}>${it.w.toFixed(4)}</td><td${cls}>${Math.abs(it.z)>999?it.z.toExponential(1):it.z.toFixed(2)}</td>
+<td${cls}>${it.yhat.toFixed(4)}</td><td${cls}>${it.L.toFixed(4)}</td>
+<td${cls}>${Math.abs(it.dL_dw)<0.0001?'≈0':it.dL_dw.toFixed(3)}</td>
+<td${cls}>${it.wNew.toFixed(4)}</td><td${cls}>${status}</td></tr>`;
+  }
+}
+
+function render(){
+  drawSigmoidCanvas('cvBad', itersBad, curStep, 200, 'bad');
+  drawSigmoidCanvas('cvGood', itersGood, curStep, 200/255, 'good');
+  updateChain('chainBad', itersBad, curStep, 200);
+  updateChain('chainGood', itersGood, curStep, 200/255);
+  updateTable('tblBad', itersBad, curStep);
+  updateTable('tblGood', itersGood, curStep);
+  document.getElementById('stepLabel').textContent=`迭代 ${curStep}`;
+}
+
+function goStep(d){
+  curStep=Math.max(0,Math.min(maxStep,curStep+d));
+  render();
+}
+
+function toggleAuto(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;document.getElementById('btnAuto').textContent='▶ 自动播放';return}
+  document.getElementById('btnAuto').textContent='⏸ 暂停';
+  autoTimer=setInterval(()=>{
+    if(curStep>=maxStep){clearInterval(autoTimer);autoTimer=null;document.getElementById('btnAuto').textContent='▶ 自动播放';return}
+    curStep++;render();
+  },800);
+}
+
+const params=new URLSearchParams(location.search);
+const pStep=params.get('step');
+if(pStep!==null) curStep=Math.min(parseInt(pStep),maxStep);
+render();
+</script>
+</body>
+</html>
