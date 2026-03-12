@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOLO11 NPU 推理管线动画</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f1117;color:#e4e4e8;font-family:'Segoe UI',system-ui,sans-serif;overflow-x:hidden;display:flex;flex-direction:column;height:100vh}
+header{text-align:center;padding:18px 20px 10px;border-bottom:1px solid #2a2d3a;flex-shrink:0}
+header h1{font-size:22px;font-weight:700}
+header p{color:#8888a0;margin-top:4px;font-size:13px}
+.toolbar{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 20px;border-bottom:1px solid #2a2d3a;flex-shrink:0;background:#13151d}
+.toolbar button{background:#1a1d27;color:#e4e4e8;border:1px solid #2a2d3a;border-radius:6px;padding:6px 18px;font-size:13px;cursor:pointer;transition:.2s}
+.toolbar button:hover{border-color:#6c8cff;color:#6c8cff}
+.toolbar button:disabled{opacity:.3;cursor:default;color:#e4e4e8;border-color:#2a2d3a}
+.toolbar .label{color:#8888a0;font-size:12px;min-width:70px;text-align:center}
+.dots{display:flex;gap:5px}
+.dots span{width:9px;height:9px;border-radius:50%;background:#2a2d3a;cursor:pointer;transition:.25s}
+.dots span.on{background:#6c8cff;box-shadow:0 0 6px #6c8cff}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+canvas{flex:1;display:block;width:100%}
+.info{padding:10px 24px 14px;border-top:1px solid #2a2d3a;flex-shrink:0;background:#13151d}
+.info h3{font-size:15px;margin-bottom:4px;color:#6c8cff}
+.info p{font-size:12px;color:#8888a0;line-height:1.6}
+.info code{background:#1a1d27;padding:1px 5px;border-radius:3px;font-size:11px;color:#ffc46c}
+</style>
+</head>
+<body>
+<header>
+  <h1>YOLO11 NPU 推理管线 · 全流程动画</h1>
+  <p>model-zoo / samples / YOLO11_det — ta-runtime API 完整数据流可视化</p>
+</header>
+<div class="toolbar">
+  <button id="bp" onclick="go(-1)">◀ 上一步</button>
+  <div class="dots" id="dots"></div>
+  <button id="bn" onclick="go(1)">下一步 ▶</button>
+  <span class="label" id="lb">1/10</span>
+  <button id="ba" onclick="toggleAuto()">▶ 自动</button>
+</div>
+<div class="main">
+  <canvas id="cv"></canvas>
+</div>
+<div class="info">
+  <h3 id="iTitle"></h3>
+  <p id="iDesc"></p>
+</div>
+
+<script>
+"use strict";
+const canvas = document.getElementById('cv');
+const G = canvas.getContext('2d');
+let W = 800, H = 500, DPR = 1;
+const TOTAL = 10;
+let cur = 0, autoTm = null, startT = 0;
+
+const STAGES = [
+  {title:'Step 1 · 读取原始图像',
+   desc:'使用 <code>cv::imread()</code> 读取 BGR 格式图片。原始分辨率如 1920×1080，像素按 B-G-R 交织排列在内存中。'},
+  {title:'Step 2 · Letterbox 等比缩放 + 填充',
+   desc:'<code>ratio = min(640/H, 640/W) = 0.333</code> → 缩放至 640×360 → 上下各填充 140px 灰色 (114,114,114) → 最终 640×640。保持纵横比不变形。'},
+  {title:'Step 3 · BGR → RGB 通道交换',
+   desc:'<code>cv::cvtColor(dst, dst, COLOR_BGR2RGB)</code> — OpenCV 默认 BGR，模型训练时使用 RGB，需要交换 B 和 R 通道。'},
+  {title:'Step 4 · HWC → CHW 布局转换',
+   desc:'<code>cv::split()</code> 拆分 3 通道后按 C-H-W 顺序拼接。HWC: RGBRGBRGB… → CHW: RRR…GGG…BBB…。NPU 需要 CHW 格式。'},
+  {title:'Step 5 · 归一化 + 量化',
+   desc:'像素值 /255 归一化到 [0,1]，再按 <code>q = round(x/scale) + zp</code> 量化为 INT8 [-128,127]。减少内存带宽，加速 NPU 计算。'},
+  {title:'Step 6 · NPU 推理 (ta-runtime)',
+   desc:'<code>ta_runtime_set_input_cva()</code> 绑定输入 → <code>ta_runtime_run_network()</code> 同步执行 → <code>ta_runtime_invalidate_buffer()</code> 刷新缓存。'},
+  {title:'Step 7 · 反量化 + 3 个多尺度特征图',
+   desc:'NPU 输出 3 个 tensor：80×80 (stride 8, 小目标)、40×40 (stride 16, 中目标)、20×20 (stride 32, 大目标)。通过 <code>(val-zp)*scale</code> 反量化为 FP32。'},
+  {title:'Step 8 · DFL 解码 + Proposal 生成',
+   desc:'每个网格点：80 类 sigmoid 取最高分 → DFL softmax(16 bins) 回归 4 个方向距离 → center ± distance = 边界框。置信度低于 0.25 的直接丢弃。'},
+  {title:'Step 9 · NMS 非极大值抑制',
+   desc:'按置信度降序排列，逐类别计算 IoU = 交集/并集。IoU > 0.45 的重叠框被抑制，只保留最佳框。Class-aware: 不同类别不互相抑制。'},
+  {title:'Step 10 · 坐标反变换 + 绘制结果',
+   desc:'Letterbox 坐标 → 原图坐标：<code>x -= pad; x /= ratio;</code> 然后 clamp 到原图边界。最后用 <code>cv::rectangle</code> 和 <code>cv::putText</code> 绘制。'},
+];
+
+function initDots(){const d=document.getElementById('dots');for(let i=0;i<TOTAL;i++){const s=document.createElement('span');s.onclick=()=>goTo(i);d.appendChild(s)}}
+function updUI(){
+  document.querySelectorAll('.dots span').forEach((s,i)=>s.className=i===cur?'on':'');
+  document.getElementById('lb').textContent=`${cur+1}/${TOTAL}`;
+  document.getElementById('bp').disabled=cur===0;
+  document.getElementById('bn').disabled=cur===TOTAL-1;
+  document.getElementById('iTitle').textContent=STAGES[cur].title;
+  document.getElementById('iDesc').innerHTML=STAGES[cur].desc;
+  startT=performance.now()/1000;
+}
+function go(d){goTo(cur+d)}
+function goTo(i){cur=Math.max(0,Math.min(TOTAL-1,i));updUI()}
+function toggleAuto(){const b=document.getElementById('ba');if(autoTm){clearInterval(autoTm);autoTm=null;b.textContent='▶ 自动'}else{autoTm=setInterval(()=>{if(cur<TOTAL-1)go(1);else toggleAuto()},5000);b.textContent='⏸ 停'}}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' ')go(1);if(e.key==='ArrowLeft')go(-1)});
+
+function resize(){
+  const r=canvas.parentElement.getBoundingClientRect();
+  DPR=window.devicePixelRatio||1;
+  W=r.width; H=r.height;
+  canvas.width=W*DPR; canvas.height=H*DPR;
+}
+window.addEventListener('resize',resize);
+
+/* ===== Drawing Helpers ===== */
+function rr(x,y,w,h,r,fill,stroke,lw){
+  G.beginPath();G.moveTo(x+r,y);G.lineTo(x+w-r,y);G.quadraticCurveTo(x+w,y,x+w,y+r);
+  G.lineTo(x+w,y+h-r);G.quadraticCurveTo(x+w,y+h,x+w-r,y+h);G.lineTo(x+r,y+h);
+  G.quadraticCurveTo(x,y+h,x,y+h-r);G.lineTo(x,y+r);G.quadraticCurveTo(x,y,x+r,y);G.closePath();
+  if(fill){G.fillStyle=fill;G.fill()}
+  if(stroke){G.strokeStyle=stroke;G.lineWidth=lw||1.5;G.stroke()}
+}
+function arr(x1,y1,x2,y2,col,dash){
+  G.save();G.strokeStyle=col||'#6c8cff';G.lineWidth=2;
+  if(dash)G.setLineDash([6,4]);
+  G.beginPath();G.moveTo(x1,y1);G.lineTo(x2,y2);G.stroke();
+  const a=Math.atan2(y2-y1,x2-x1),sz=8;
+  G.fillStyle=col||'#6c8cff';G.beginPath();G.moveTo(x2,y2);
+  G.lineTo(x2-sz*Math.cos(a-.4),y2-sz*Math.sin(a-.4));
+  G.lineTo(x2-sz*Math.cos(a+.4),y2-sz*Math.sin(a+.4));G.fill();G.restore();
+}
+function txt(s,x,y,col,sz,align){
+  G.fillStyle=col||'#8888a0';G.font=(sz||12)+'px system-ui,sans-serif';G.textAlign=align||'center';G.textBaseline='middle';
+  G.fillText(s,x,y);
+}
+function txtL(s,x,y,col,sz){txt(s,x,y,col,sz,'left')}
+function ease(t){return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2}
+
+/* ===== STAGE DRAW FUNCTIONS ===== */
+
+function d0(t){
+  const cx=W/2, cy=H/2-20;
+  const pulse=.5+.5*Math.sin(t*2.5);
+
+  txt('cv::imread()',cx,cy-120,'#6c8cff',14);
+
+  const iw=Math.min(360,W*.4), ih=iw*9/16;
+  rr(cx-iw/2,cy-ih/2,iw,ih,8,null,'#6c8cff',2);
+  const grd=G.createLinearGradient(cx-iw/2,cy-ih/2,cx+iw/2,cy+ih/2);
+  grd.addColorStop(0,'#6c8cff18');grd.addColorStop(1,'#ff6c8c08');
+  G.fillStyle=grd;G.fillRect(cx-iw/2+2,cy-ih/2+2,iw-4,ih-4);
+
+  G.globalAlpha=.35+.15*pulse;
+  rr(cx-iw/3,cy-ih/3,iw*.25,ih*.4,3,'#4488ff30','#4488ff');
+  rr(cx+iw*.05,cy-ih*.15,iw*.18,ih*.5,3,'#ff884430','#ff8844');
+  G.beginPath();G.arc(cx-iw*.05,cy+ih*.2,ih*.18,0,Math.PI*2);G.fillStyle='#44cc8830';G.fill();G.strokeStyle='#44cc88';G.lineWidth=1;G.stroke();
+  G.globalAlpha=1;
+
+  txt('原始图像  1920 × 1080  BGR',cx,cy+ih/2+24,'#e4e4e8',15);
+
+  const pw=Math.min(300,W*.35), py=cy+ih/2+50;
+  const cols=['#4466dd','#55aa55','#dd4444'];
+  const cw2=pw/12;
+  for(let i=0;i<12;i++){G.fillStyle=cols[i%3];G.fillRect(cx-pw/2+i*cw2+1,py,cw2-2,22)}
+  txt('B  G  R  B  G  R  B  G  R  B  G  R …',cx,py+36,'#8888a0',11);
+  txt('像素内存排列 (BGR 交织, HWC)',cx,py+52,'#5c6370',11);
+}
+
+function d1(t){
+  const cx=W/2, cy=H/2;
+  const p=Math.min(1,t/1.8), ep=ease(p);
+
+  const oW=Math.min(200,W*.2), oH=oW*9/16;
+  const oX=W*.08, oY=cy-oH/2-20;
+  rr(oX,oY,oW,oH,6,null,'#6c8cff',2);
+  txt('1920×1080',oX+oW/2,oY+oH+16,'#6c8cff',11);
+
+  const midX=W*.35;
+  arr(oX+oW+8,oY+oH/2,midX-8,oY+oH/2,'#6c8cff60');
+  txt('resize',midX-40,oY+oH/2-12,'#6cffa0',11);
+
+  const rW=Math.round(oW*ep), rH=Math.round(oH*.56*ep+1);
+  if(p>.05){
+    rr(midX,oY+oH/2-rH/2,rW,rH,4,'#6cffa015','#6cffa0');
+    txt(`${Math.round(640*ep)}×${Math.round(360*ep)}`,midX+rW/2,oY+oH+16,'#6cffa0',11);
+  }
+
+  const lbX=W*.58, lbY=cy-W*.15, lbS=Math.min(W*.3,240);
+  arr(midX+oW+8,oY+oH/2,lbX-8,oY+oH/2,'#ffc46c60');
+
+  rr(lbX,lbY,lbS,lbS,8,null,'#ffc46c',2);
+  const padH=lbS*.22;
+  G.fillStyle='#72727235';G.fillRect(lbX+2,lbY+2,lbS-4,padH);
+  G.fillStyle='#72727235';G.fillRect(lbX+2,lbY+lbS-padH-2,lbS-4,padH);
+  const grd2=G.createLinearGradient(lbX,lbY+padH,lbX+lbS,lbY+lbS-padH);
+  grd2.addColorStop(0,'#6c8cff18');grd2.addColorStop(1,'#ff6c8c10');
+  G.fillStyle=grd2;G.fillRect(lbX+2,lbY+padH,lbS-4,lbS-2*padH);
+
+  txt('640×640',lbX+lbS/2,lbY+lbS+18,'#ffc46c',13);
+
+  const aX=lbX+lbS+8;
+  G.save();G.strokeStyle='#ffc46c50';G.lineWidth=1;G.setLineDash([3,3]);
+  G.beginPath();G.moveTo(lbX+lbS,lbY+2);G.lineTo(aX+4,lbY+2);G.stroke();
+  G.beginPath();G.moveTo(lbX+lbS,lbY+padH);G.lineTo(aX+4,lbY+padH);G.stroke();
+  G.restore();
+  txtL('140px 灰色',aX+8,lbY+padH/2,'#ffc46c',10);
+  txtL('(114,114,114)',aX+8,lbY+padH/2+14,'#5c6370',9);
+
+  const fY=lbY+lbS+44;
+  txt('ratio = min(640/1080, 640/1920) = 0.333',cx,fY,'#8888a0',12);
+  txt('缩放后 640×360，上下各填充 140px 灰色',cx,fY+18,'#8888a0',12);
+
+  if(W>500){
+    const bY=fY+40;
+    rr(cx-W*.22,bY,W*.18,44,5,null,'#ff6c8c60');
+    txt('直接 resize 640×640',cx-W*.22+W*.09,bY+16,'#ff6c8c',11);
+    txt('目标变形 ✗',cx-W*.22+W*.09,bY+32,'#ff6c8c',11);
+    rr(cx+W*.04,bY,W*.18,44,5,null,'#6cffa060');
+    txt('letterbox 640×640',cx+W*.04+W*.09,bY+16,'#6cffa0',11);
+    txt('保持纵横比 ✓',cx+W*.04+W*.09,bY+32,'#6cffa0',11);
+  }
+}
+
+function d2(t){
+  const cx=W/2, cy=H/2-30;
+  const sw=Math.min(1,Math.max(0,(t-.3)/1));
+  const ep=ease(sw);
+
+  const bsz=Math.min(50,W*.06), gap=8;
+  const bx=cx-W*.2, by=cy-bsz/2;
+  txt('BGR 排列',bx+1.5*(bsz+gap),by-20,'#8888a0',13);
+  const bgrC=['#4466dd','#55aa55','#dd4444'], bgrL=['B','G','R'];
+  for(let i=0;i<3;i++){
+    rr(bx+i*(bsz+gap),by,bsz,bsz,5,bgrC[i]+'60',bgrC[i]);
+    txt(bgrL[i],bx+i*(bsz+gap)+bsz/2,by+bsz/2,'#fff',15);
+  }
+
+  const aw=W*.12;
+  arr(bx+3*(bsz+gap)+8,cy,bx+3*(bsz+gap)+aw,cy,'#ffc46c',true);
+  txt('cvtColor',bx+3*(bsz+gap)+aw/2,cy-14,'#ffc46c',11);
+
+  const rx=cx+W*.1, ry=cy-bsz/2;
+  txt('RGB 排列',rx+1.5*(bsz+gap),ry-20,'#8888a0',13);
+  const rgbC=['#dd4444','#55aa55','#4466dd'], rgbL=['R','G','B'];
+  for(let i=0;i<3;i++){
+    rr(rx+i*(bsz+gap),ry,bsz,bsz,5,rgbC[i]+'60',rgbC[i]);
+    txt(rgbL[i],rx+i*(bsz+gap)+bsz/2,ry+bsz/2,'#fff',15);
+  }
+
+  // swap animation
+  if(ep>0&&ep<1){
+    const swX=bx+(bsz+gap)*ep*3+cx*.05;
+    G.globalAlpha=1-ep;
+    rr(swX,by-bsz*.7,bsz*.7,bsz*.7,4,'#4466dd40','#4466dd');
+    txt('B',swX+bsz*.35,by-bsz*.35,'#fff',12);
+    G.globalAlpha=1;
+    const swX2=rx+2*(bsz+gap)-(bsz+gap)*ep*3+cx*.05;
+    G.globalAlpha=1-ep;
+    rr(swX2,by+bsz*1.2,bsz*.7,bsz*.7,4,'#dd444440','#dd4444');
+    txt('R',swX2+bsz*.35,by+bsz*1.55,'#fff',12);
+    G.globalAlpha=1;
+  }
+
+  const dy=cy+bsz+40;
+  const pxW=Math.min(24,W*.03);
+  for(let p=0;p<8;p++){
+    const px=cx-4*(pxW+3)+p*(pxW+3);
+    const isBGR=p<4;
+    const c1=isBGR?['#4466dd','#55aa55','#dd4444']:['#dd4444','#55aa55','#4466dd'];
+    for(let ch=0;ch<3;ch++){G.fillStyle=c1[ch];G.fillRect(px,dy+ch*8,pxW,6)}
+    txt(isBGR?'BGR':'RGB',px+pxW/2,dy+34,'#5c6370',8);
+  }
+  if(sw>0.8) txt('✓ 通道交换完成',cx,dy+56,'#6cffa0',14);
+}
+
+function d3(t){
+  const cx=W/2, cy=H*.35;
+  const p=Math.min(1,t/2), ep=ease(p);
+
+  const cellW=Math.min(20,W*.025), cellH=cellW;
+  const cols3=['#dd4444','#55aa55','#4466dd'], cN=['R','G','B'];
+  const gridCols=12, gridRows=3;
+  const gw=gridCols*(cellW+2), startX=cx-gw/2;
+
+  txt('HWC 内存布局 (cv::Mat)',cx,cy-cellH*2-10,'#6c8cff',13);
+  for(let r=0;r<gridRows;r++){
+    for(let c=0;c<gridCols;c++){
+      const ci=c%3;
+      G.globalAlpha=p>.3?.3:1;
+      G.fillStyle=cols3[ci];
+      G.fillRect(startX+c*(cellW+2),cy-cellH*1.5+r*(cellH+2),cellW,cellH);
+      if(cellW>=14){G.fillStyle='#fff';G.font='8px monospace';G.textAlign='center';G.textBaseline='middle';G.fillText(cN[ci],startX+c*(cellW+2)+cellW/2,cy-cellH*1.5+r*(cellH+2)+cellH/2)}
+      G.globalAlpha=1;
+    }
+  }
+  txt('R G B R G B R G B R G B …',cx,cy+cellH*2+6,'#8888a0',10);
+
+  if(p>.3){
+    const arY=cy+cellH*2+24;
+    const ap=Math.min(1,(p-.3)/.3);
+    G.globalAlpha=ap;
+    arr(cx,arY,cx,arY+30,'#ffc46c');
+    txt('cv::split() + memcpy()',cx,arY+14,'#ffc46c',11);
+    G.globalAlpha=1;
+  }
+
+  if(p>.5){
+    const chY=cy+cellH*2+70;
+    const ap2=Math.min(1,(p-.5)/.5);
+    G.globalAlpha=ap2;
+    txt('CHW 内存布局 (NPU tensor)',cx,chY-6,'#6cffa0',13);
+    const chW=Math.min(100,W*.12), chH=Math.min(60,H*.12);
+    for(let ch=0;ch<3;ch++){
+      const bx=cx-1.8*(chW)+ch*(chW+W*.06);
+      rr(bx,chY+8,chW,chH,5,cols3[ch]+'30',cols3[ch]);
+      txt(`通道 ${cN[ch]}`,bx+chW/2,chY+8+chH/2,'#fff',13);
+    }
+    txt('RRR…RRR  |  GGG…GGG  |  BBB…BBB',cx,chY+chH+30,'#8888a0',11);
+    txt('3 × 640 × 640 = 1,228,800 字节 (CHW)',cx,chY+chH+48,'#5c6370',11);
+    G.globalAlpha=1;
+  }
+}
+
+function d4(t){
+  const cx=W/2, cy=H*.3;
+  const bw=Math.min(150,W*.17), bh=Math.min(65,H*.12);
+
+  const boxes=[
+    {x:W*.08,label:'UINT8 像素',sub:'[0, 255]',col:'#6c8cff'},
+    {x:W*.35,label:'FP32 归一化',sub:'[0.0, 1.0]',col:'#6cffa0'},
+    {x:W*.62,label:'INT8 量化值',sub:'[-128, 127]',col:'#a96cff'},
+  ];
+  const ops=['÷ 255','round(x/scale)+zp'];
+
+  for(let i=0;i<3;i++){
+    const b=boxes[i];
+    rr(b.x,cy-bh/2,bw,bh,6,b.col+'18',b.col);
+    txt(b.label,b.x+bw/2,cy-6,b.col,12);
+    txt(b.sub,b.x+bw/2,cy+12,b.col,10);
+    if(i<2){
+      const nx=boxes[i+1].x;
+      arr(b.x+bw+4,cy,nx-4,cy,'#ffc46c');
+      txt(ops[i],(b.x+bw+nx)/2,cy-14,'#ffc46c',10);
+    }
+  }
+
+  const fy=cy+bh/2+30;
+  const fw=Math.min(480,W*.7);
+  rr(cx-fw/2,fy,fw,80,8,'#1a1d27','#2a2d3a');
+  G.font='12px monospace';G.textAlign='left';G.textBaseline='middle';
+  G.fillStyle='#ffc46c';G.fillText('normalized = pixel / 255.0',cx-fw/2+16,fy+20);
+  G.fillStyle='#a96cff';G.fillText('quantized  = round(norm / scale) + zp',cx-fw/2+16,fy+42);
+  G.fillStyle='#5c6370';G.fillText('result     = clamp(quantized, -128, 127)',cx-fw/2+16,fy+64);
+
+  const ey=fy+100;
+  txt('示例：pixel=200, scale=0.003921, zp=0',cx,ey,'#8888a0',11);
+  const ep2=Math.min(1,Math.max(0,(t-1)/1.2));
+  if(ep2>0){G.globalAlpha=ep2;txt('200 → 0.784 → round(0.784/0.003921)+0 = 200 → clamp → 127 (INT8)',cx,ey+18,'#6cffa0',11);G.globalAlpha=1}
+}
+
+function d5(t){
+  const cx=W/2, cy=H/2;
+  const pulse=.6+.4*Math.sin(t*3);
+
+  const cpuW=Math.min(200,W*.24), cpuH=Math.min(140,H*.3);
+  const cpuX=W*.04, cpuY=cy-cpuH/2;
+  rr(cpuX,cpuY,cpuW,cpuH,10,'#1a1d27','#6c8cff');
+  txt('CPU 侧',cpuX+cpuW/2,cpuY-10,'#6c8cff',13);
+  rr(cpuX+10,cpuY+14,cpuW-20,32,4,'#6c8cff18','#6c8cff60');
+  txt('input_tensor (INT8)',cpuX+cpuW/2,cpuY+30,'#6c8cff',10);
+  rr(cpuX+10,cpuY+cpuH-46,cpuW-20,32,4,'#6cffa018','#6cffa060');
+  txt('output_buffer (INT8)',cpuX+cpuW/2,cpuY+cpuH-30,'#6cffa0',10);
+
+  // DMA dots going right
+  const dmaX1=cpuX+cpuW+4, dmaX2=W-cpuW-W*.04-4;
+  for(let i=0;i<4;i++){
+    const ph=((t*2+i*.25)%1);
+    const dx=dmaX1+ph*(dmaX2-dmaX1);
+    G.fillStyle=`rgba(108,140,255,${1-ph})`;G.beginPath();G.arc(dx,cpuY+30,3,0,Math.PI*2);G.fill();
+  }
+  arr(dmaX1,cpuY+30,dmaX2,cpuY+30,'#6c8cff30');
+  txt('DMA →',(dmaX1+dmaX2)/2,cpuY+16,'#6c8cff',10);
+
+  // DMA dots going left
+  for(let i=0;i<4;i++){
+    const ph=((t*2+i*.25)%1);
+    const dx=dmaX2-ph*(dmaX2-dmaX1);
+    G.fillStyle=`rgba(108,255,160,${1-ph})`;G.beginPath();G.arc(dx,cpuY+cpuH-30,3,0,Math.PI*2);G.fill();
+  }
+  arr(dmaX2,cpuY+cpuH-30,dmaX1,cpuY+cpuH-30,'#6cffa030');
+  txt('← DMA',(dmaX1+dmaX2)/2,cpuY+cpuH-16,'#6cffa0',10);
+
+  // NPU
+  const npuX=dmaX2, npuW=cpuW, npuH=cpuH;
+  G.save();G.shadowColor='#a96cff';G.shadowBlur=18*pulse;
+  rr(npuX,cpuY,npuW,npuH,10,'#1e1030','#a96cff',2);
+  G.restore();
+  txt('NPU (Vivante VIP)',npuX+npuW/2,cpuY-10,'#a96cff',13);
+
+  const coreN=4, coreW2=(npuW-24)/coreN-4, coreH2=Math.min(36,npuH*.25);
+  for(let i=0;i<coreN;i++){
+    G.globalAlpha=.4+.6*Math.sin(t*4+i*1.5);
+    rr(npuX+12+i*(coreW2+4),cpuY+18,coreW2,coreH2,3,'#a96cff28','#a96cff60');
+    txt(`C${i}`,npuX+12+i*(coreW2+4)+coreW2/2,cpuY+18+coreH2/2,'#a96cff',9);
+    G.globalAlpha=1;
+  }
+  txt('run_network()',npuX+npuW/2,cpuY+npuH-24,'#ffc46c',10);
+  txt('同步阻塞',npuX+npuW/2,cpuY+npuH-10,'#5c6370',9);
+
+  // timeline
+  const tlY=cpuY+cpuH+30, tlH=36, tlW=W*.8;
+  const tlX=W*.1;
+  rr(tlX,tlY,tlW,tlH,5,'#1a1d27','#2a2d3a');
+  const phases=[{l:'set_input',w:.15,c:'#6c8cff'},{l:'run_network',w:.55,c:'#a96cff'},{l:'invalidate',w:.15,c:'#6cffa0'}];
+  let px=tlX+4;
+  for(const ph of phases){
+    const pw=tlW*ph.w;
+    G.fillStyle=ph.c+'30';G.fillRect(px,tlY+4,pw-4,tlH-8);
+    G.strokeStyle=ph.c;G.lineWidth=1;G.strokeRect(px,tlY+4,pw-4,tlH-8);
+    txt(ph.l,px+pw/2-2,tlY+tlH/2,ph.c,9);
+    px+=pw;
+  }
+  txt('时序',tlX-28,tlY+tlH/2,'#5c6370',10);
+}
+
+function d6(t){
+  const cx=W/2;
+
+  rr(W*.05,16,W*.18,40,5,'#a96cff18','#a96cff');txt('NPU 输出',W*.05+W*.09,36,'#a96cff',11);
+  arr(W*.05+W*.18+4,36,W*.3,36,'#a96cff');
+  rr(W*.31,16,W*.2,40,5,'#ff6c8c18','#ff6c8c');txt('反量化',W*.31+W*.1,30,'#ff6c8c',11);txt('(val-zp)×scale',W*.31+W*.1,44,'#ff6c8c',9);
+  arr(W*.31+W*.2+4,36,W*.56,36,'#ff6c8c');
+  rr(W*.57,16,W*.2,40,5,'#6cffa018','#6cffa0');txt('FP32 特征图',W*.57+W*.1,36,'#6cffa0',11);
+
+  const feats=[
+    {s:8,g:80,label:'80×80×144',color:'#6c8cff',desc:'小目标 stride=8'},
+    {s:16,g:40,label:'40×40×144',color:'#6cffa0',desc:'中目标 stride=16'},
+    {s:32,g:20,label:'20×20×144',color:'#ffc46c',desc:'大目标 stride=32'},
+  ];
+  const boxS=Math.min(140,W*.16,H*.3);
+  const startY=80;
+  for(let i=0;i<3;i++){
+    const f=feats[i];
+    const bx=cx-1.6*boxS+i*(boxS+W*.04);
+    rr(bx,startY,boxS,boxS,6,f.color+'12',f.color);
+    const gN=f.g>40?10:(f.g>20?8:5), gw=boxS/gN;
+    G.strokeStyle=f.color+'25';G.lineWidth=.5;
+    for(let g=0;g<=gN;g++){G.beginPath();G.moveTo(bx+g*gw,startY);G.lineTo(bx+g*gw,startY+boxS);G.stroke();G.beginPath();G.moveTo(bx,startY+g*gw);G.lineTo(bx+boxS,startY+g*gw);G.stroke()}
+    const hc=Math.floor((t*2+i)%gN), hr=Math.floor((t*1.5+i*2)%gN);
+    G.fillStyle=f.color+'50';G.fillRect(bx+hc*gw,startY+hr*gw,gw,gw);
+    txt(f.label,bx+boxS/2,startY+boxS+16,f.color,11);
+    txt(f.desc,bx+boxS/2,startY+boxS+32,'#5c6370',10);
+    txt(`${f.g*f.g} 网格`,bx+boxS/2,startY+boxS+48,'#5c6370',9);
+  }
+
+  const infoY=startY+boxS+66;
+  if(infoY<H-30){
+    rr(cx-W*.3,infoY,W*.6,36,5,'#1a1d27','#2a2d3a');
+    txt('每网格输出 144 值 = 4×16 (DFL bbox) + 80 (分类)',cx,infoY+18,'#e4e4e8',11);
+  }
+}
+
+function d7(t){
+  const cx=W/2;
+  const gs=Math.min(180,W*.22,H*.4);
+  const gx=W*.05, gy=H*.08;
+
+  rr(gx,gy,gs,gs,6,null,'#6c8cff30');
+  const gN=8, cw2=gs/gN;
+  G.strokeStyle='#6c8cff18';G.lineWidth=.5;
+  for(let i=0;i<=gN;i++){G.beginPath();G.moveTo(gx+i*cw2,gy);G.lineTo(gx+i*cw2,gy+gs);G.stroke();G.beginPath();G.moveTo(gx,gy+i*cw2);G.lineTo(gx+gs,gy+i*cw2);G.stroke()}
+  txt('特征图网格',gx+gs/2,gy-10,'#6c8cff',11);
+
+  const ac=Math.floor(t*2)%(gN*gN), ar2=Math.floor(ac/gN), acol=ac%gN;
+  G.fillStyle='#ffc46c50';G.fillRect(gx+acol*cw2,gy+ar2*cw2,cw2,cw2);
+  G.fillStyle='#ffc46c';G.beginPath();G.arc(gx+(acol+.5)*cw2,gy+(ar2+.5)*cw2,3,0,Math.PI*2);G.fill();
+
+  const fx=gx+gs+W*.04, fy=gy;
+  const stepW=Math.min(220,W*.28), stepH=38;
+  const steps=[
+    {text:'① 扫描 80 类得分',sub:'取最高分 class_score',color:'#6c8cff'},
+    {text:'② Sigmoid 激活',sub:'prob = 1/(1+exp(-s))',color:'#6cffa0'},
+    {text:'③ 置信度过滤',sub:'prob < 0.25 → 跳过',color:'#ff6c8c'},
+    {text:'④ DFL softmax 解码',sub:'16 bins → 加权距离',color:'#ffc46c'},
+    {text:'⑤ 生成边界框',sub:'center ± distance',color:'#a96cff'},
+  ];
+  for(let i=0;i<steps.length;i++){
+    const s=steps[i];
+    const sp=Math.min(1,Math.max(0,(t-i*.25)/.6));
+    G.globalAlpha=sp;
+    rr(fx,fy+i*(stepH+8),stepW,stepH,5,s.color+'12',s.color+'70');
+    txt(s.text,fx+stepW/2,fy+i*(stepH+8)+14,s.color,11);
+    txt(s.sub,fx+stepW/2,fy+i*(stepH+8)+30,'#5c6370',9);
+    if(i<4)arr(fx+stepW/2,fy+i*(stepH+8)+stepH+2,fx+stepW/2,fy+(i+1)*(stepH+8)-2,s.color+'30');
+    G.globalAlpha=1;
+  }
+
+  // DFL bins
+  const dy=Math.max(gy+gs+10,fy+5*(stepH+8)+10);
+  if(dy+70<H){
+    rr(W*.05,dy,W*.9,64,6,'#1a1d27','#2a2d3a');
+    txt('DFL (Distribution Focal Loss)',cx,dy+14,'#ffc46c',12);
+    const binW=Math.min(18,W*.02), binH0=dy+56;
+    const binsX=cx-8*(binW+2);
+    const bv=[.01,.02,.04,.08,.12,.18,.25,.35,.40,.35,.20,.12,.06,.03,.02,.01];
+    for(let i=0;i<16;i++){
+      const bh=bv[i]*80;
+      G.fillStyle=i===8?'#ffc46caa':'#ffc46c44';G.fillRect(binsX+i*(binW+2),binH0-bh,binW,bh);
+    }
+    txt('softmax → Σ(i·P(i)) = 加权期望值 → 像素距离',cx,binH0+10,'#8888a0',9);
+  }
+}
+
+function d8(t){
+  const cx=W/2;
+  const iw=Math.min(280,W*.35), ih=Math.min(200,H*.45);
+  const ix=W*.05, iy=H*.06;
+  rr(ix,iy,iw,ih,6,'#1a1d27','#2a2d3a');
+  txt('Letterbox 640×640',ix+iw/2,iy-8,'#8888a0',11);
+
+  const boxes=[
+    {x:.12,y:.12,w:.4,h:.4,prob:.92,cls:0,keep:true},
+    {x:.15,y:.15,w:.38,h:.37,prob:.87,cls:0,keep:false},
+    {x:.13,y:.10,w:.42,h:.43,prob:.78,cls:0,keep:false},
+    {x:.58,y:.2,w:.28,h:.45,prob:.85,cls:1,keep:true},
+    {x:.60,y:.23,w:.26,h:.42,prob:.72,cls:1,keep:false},
+    {x:.30,y:.65,w:.22,h:.22,prob:.68,cls:2,keep:true},
+  ];
+  const cc=['#6c8cff','#ff6c8c','#6cffa0'];
+  const nmsP=Math.min(1,t/3);
+
+  for(const b of boxes){
+    const al=b.keep?1:Math.max(.12,1-nmsP);
+    G.globalAlpha=al;
+    G.strokeStyle=cc[b.cls];G.lineWidth=b.keep?2.5:1;
+    if(!b.keep&&nmsP>.5)G.setLineDash([4,4]);
+    G.strokeRect(ix+b.x*iw,iy+b.y*ih,b.w*iw,b.h*ih);
+    G.setLineDash([]);
+    if(!b.keep&&nmsP>.7){
+      G.strokeStyle='#ff4444';G.lineWidth=2;
+      G.beginPath();G.moveTo(ix+b.x*iw,iy+b.y*ih);G.lineTo(ix+(b.x+b.w)*iw,iy+(b.y+b.h)*ih);G.stroke();
+      G.beginPath();G.moveTo(ix+(b.x+b.w)*iw,iy+b.y*ih);G.lineTo(ix+b.x*iw,iy+(b.y+b.h)*ih);G.stroke();
+    }
+    if(b.keep||nmsP<.5)txt(`${(b.prob*100)|0}%`,ix+b.x*iw+b.w*iw/2,iy+b.y*ih-6,cc[b.cls],9);
+    G.globalAlpha=1;
+  }
+
+  const nx=ix+iw+W*.04, nstepW=Math.min(240,W*.33);
+  txt('NMS 过程',nx+nstepW/2,iy-4,'#ffc46c',13);
+  const ns=[
+    {text:'1. 按置信度排序',sub:'92% > 87% > 85% > 78% …',color:'#6c8cff'},
+    {text:'2. 保留最高分框 92%',sub:'标记为 keep',color:'#6cffa0'},
+    {text:'3. 87%框 IoU=0.82>0.45',sub:'抑制 ✗',color:'#ff6c8c'},
+    {text:'4. 78%框 IoU=0.75>0.45',sub:'抑制 ✗',color:'#ff6c8c'},
+    {text:'5. 不同类别独立',sub:'class-aware NMS',color:'#ffc46c'},
+  ];
+  for(let i=0;i<ns.length;i++){
+    const s=ns[i],sp=Math.min(1,Math.max(0,(nmsP-i*.12)/.2));
+    G.globalAlpha=sp;
+    rr(nx,iy+6+i*42,nstepW,36,4,s.color+'10',s.color+'50');
+    txt(s.text,nx+nstepW/2,iy+6+i*42+13,s.color,10);
+    txt(s.sub,nx+nstepW/2,iy+6+i*42+28,'#5c6370',9);
+    G.globalAlpha=1;
+  }
+
+  const fy=Math.max(iy+ih+10,iy+5*42+20);
+  if(fy+30<H){
+    rr(W*.05,fy,W*.9,30,5,'#1a1d27','#2a2d3a');
+    txt('IoU = 交集面积 / 并集面积    →  IoU > 0.45 则抑制      结果：3 框保留, 3 框抑制',cx,fy+15,'#e4e4e8',10);
+  }
+}
+
+function d9(t){
+  const cx=W/2;
+  const p=Math.min(1,t/2.5), ep=ease(p);
+
+  const ls=Math.min(160,W*.18,H*.35);
+  const lx=W*.04, ly=H*.06;
+  rr(lx,ly,ls,ls,6,'#1a1d27','#2a2d3a');
+  txt('Letterbox 空间',lx+ls/2,ly-8,'#ffc46c',10);
+  G.fillStyle='#72727228';G.fillRect(lx+2,ly+2,ls-4,ls*.17);
+  G.fillStyle='#72727228';G.fillRect(lx+2,ly+ls-ls*.17-2,ls-4,ls*.17);
+  G.strokeStyle='#6c8cff';G.lineWidth=2;G.strokeRect(lx+ls*.2,ly+ls*.3,ls*.5,ls*.35);
+  txt('(120,190,80,60)',lx+ls*.45,ly+ls*.7+12,'#6c8cff',8);
+
+  arr(lx+ls+8,ly+ls/2,lx+ls+W*.06,ly+ls/2,'#ffc46c');
+
+  const tx=lx+ls+W*.08, ty=ly, stepW=Math.min(210,W*.26);
+  const ts2=[
+    {text:'① 减填充偏移',formula:'x-=pad_left, y-=pad_top',detail:'120-0, 190-140=50',color:'#ff6c8c'},
+    {text:'② 除缩放比',formula:'x /= ratio, y /= ratio',detail:'120/0.333=360, 50/0.333=150',color:'#ffc46c'},
+    {text:'③ clamp 到原图边界',formula:'clamp(0, src_size)',detail:'0 ≤ x ≤ 1920',color:'#6cffa0'},
+  ];
+  for(let i=0;i<3;i++){
+    const s=ts2[i], sp=Math.min(1,Math.max(0,(p-i*.2)/.35));
+    G.globalAlpha=sp;
+    rr(tx,ty+i*50,stepW,42,4,s.color+'10',s.color+'50');
+    txt(s.text,tx+stepW/2,ty+i*50+14,s.color,10);
+    txt(s.formula,tx+stepW/2,ty+i*50+30,'#8888a0',9);
+    if(sp>.6)txt(s.detail,tx+stepW+10,ty+i*50+22,'#5c6370',9);
+    G.globalAlpha=1;
+  }
+
+  const ry=Math.max(ly+ls+16,ty+160);
+  const rw=W*.9, rh=Math.min(H-ry-10,180);
+  if(rh>50){
+    rr(W*.05,ry,rw,rh,8,'#0a0c14','#2a2d3a');
+    txt('最终结果：原图空间 (1920×1080)',cx,ry-6,'#e4e4e8',13);
+
+    const dets=[
+      {x:.08,y:.1,w:.18,h:.6,label:'person 92%',color:'#6c8cff'},
+      {x:.38,y:.15,w:.22,h:.55,label:'car 85%',color:'#ff6c8c'},
+      {x:.68,y:.35,w:.14,h:.35,label:'dog 68%',color:'#6cffa0'},
+    ];
+    const dp2=Math.min(1,Math.max(0,(p-.5)/.5));
+    for(let i=0;i<dets.length;i++){
+      const d=dets[i], dp=Math.min(1,Math.max(0,(dp2-i*.15)/.4));
+      G.globalAlpha=dp;
+      G.strokeStyle=d.color;G.lineWidth=2;
+      const bx2=W*.05+d.x*rw, by2=ry+d.y*rh, bw=d.w*rw*dp, bh=d.h*rh*dp;
+      G.strokeRect(bx2,by2,bw,bh);
+      if(dp>.8){
+        G.fillStyle=d.color+'cc';G.fillRect(bx2,by2-14,72,14);
+        G.fillStyle='#fff';G.font='9px system-ui';G.textAlign='left';G.textBaseline='middle';
+        G.fillText(d.label,bx2+4,by2-7);
+      }
+      G.globalAlpha=1;
+    }
+  }
+}
+
+const DRAWS=[d0,d1,d2,d3,d4,d5,d6,d7,d8,d9];
+
+function frame(){
+  resize();
+  G.save();
+  G.scale(DPR,DPR);
+  G.clearRect(0,0,W,H);
+  const t=performance.now()/1000-startT;
+  DRAWS[cur](t);
+  G.restore();
+  requestAnimationFrame(frame);
+}
+
+initDots();
+updUI();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
