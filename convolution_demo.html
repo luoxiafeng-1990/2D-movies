@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二维卷积动画演示</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1a1b26; color: #c0caf5;
+      margin: 0; padding: 20px; min-height: 100vh;
+    }
+    h1 { text-align: center; color: #7aa2f7; margin-bottom: 4px; font-size: 1.4rem; }
+    .subtitle { text-align: center; color: #565f89; margin-bottom: 14px; font-size: 0.85rem; }
+    .container { max-width: 1060px; margin: 0 auto; position: relative; }
+
+    .tabs { display: flex; gap: 4px; border-bottom: 2px solid #3b4261; margin-bottom: 14px; }
+    .tabs button {
+      padding: 9px 16px; background: transparent; color: #a9b1d6; border: none;
+      border-bottom: 3px solid transparent; margin-bottom: -2px; cursor: pointer;
+      font-size: 0.9rem; font-weight: 500;
+    }
+    .tabs button:hover { color: #c0caf5; }
+    .tabs button.active { color: #7aa2f7; border-bottom-color: #7aa2f7; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .panel {
+      background: #24283b; border-radius: 12px; padding: 14px; margin-bottom: 14px;
+      border: 1px solid #3b4261;
+    }
+    .panel h2 { color: #9ece6a; margin: 0 0 10px 0; font-size: 1rem; }
+
+    /* Config panel */
+    .config-bar {
+      display: flex; align-items: center; justify-content: center;
+      gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+      background: #24283b; border-radius: 10px; padding: 12px 16px;
+      border: 1px solid #3b4261;
+    }
+    .config-bar label { color: #a9b1d6; font-size: 0.85rem; }
+    .config-bar select, .config-bar input[type="number"] {
+      background: #16161e; color: #9ece6a; border: 1px solid #3b4261;
+      padding: 5px 10px; border-radius: 6px; font-size: 0.9rem; font-weight: 600;
+    }
+    .config-bar .size-formula {
+      color: #73daca; font-family: monospace; font-size: 0.85rem;
+    }
+    .config-bar button {
+      background: #f7768e; color: #1a1b26; padding: 7px 16px;
+      border: none; border-radius: 7px; font-weight: 600; cursor: pointer; font-size: 0.85rem;
+    }
+    .config-bar button:hover { background: #ff9e64; }
+
+    /* Grid cells */
+    .grid { display: inline-grid; }
+    .gcell {
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 5px; font-weight: 600; position: relative;
+      transition: background 0.15s, opacity 0.2s, transform 0.2s;
+    }
+    .gcell.c-input { background: #3b4261; color: #c0caf5; }
+    .gcell.c-highlight { background: #4a6a3a; color: #9ece6a; border: 2px solid #9ece6a; }
+    .gcell.c-kernel { background: #7aa2f7; color: #1a1b26; }
+    .gcell.c-output { background: #3b4261; color: #565f89; }
+    .gcell.c-output.filled { background: #bb9af7; color: #1a1b26; }
+    .gcell.c-output.current { background: #9ece6a; color: #1a1b26; box-shadow: 0 0 14px #9ece6a88; }
+    .gcell.c-patch { background: #3b4261; color: #565f89; }
+    .gcell.c-patch.filled { background: #9ece6a; color: #1a1b26; }
+    .gcell.c-product { background: #3b4261; color: #565f89; }
+    .gcell.c-product.filled { background: #bb9af7; color: #1a1b26; }
+
+    /* ===== STRONG FOCUS HIGHLIGHT ===== */
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 0 4px #ff4757, 0 0 18px 4px #ff475799; transform: scale(1.18); }
+      50%  { box-shadow: 0 0 0 6px #ff6348, 0 0 28px 8px #ff6348bb; transform: scale(1.25); }
+    }
+    .gcell.active-cell {
+      animation: pulse-glow 0.7s ease-in-out infinite;
+      background: #ff4757 !important; color: #fff !important;
+      z-index: 10; border: 3px solid #fff !important;
+      font-weight: 800;
+    }
+    .gcell.row-hl {
+      outline: 3px solid #ff634888; outline-offset: -1px;
+    }
+    .gcell.dim-cell {
+      opacity: 0.25; filter: grayscale(0.5);
+    }
+
+    .top-row {
+      display: flex; align-items: flex-start; justify-content: center;
+      gap: 30px; flex-wrap: wrap; margin-bottom: 6px;
+    }
+    .board { text-align: center; }
+    .board-label { margin-top: 5px; font-size: 0.8rem; color: #a9b1d6; }
+    .arrow-sep { color: #565f89; font-size: 24px; padding-top: 40px; }
+
+    .calc-panel {
+      background: #16161e; border-radius: 10px; padding: 14px; margin: 10px 0;
+      border: 1px solid #3b4261;
+    }
+    .calc-panel h3 { color: #73daca; margin: 0 0 12px 0; font-size: 0.9rem; text-align: center; }
+    .calc-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px; flex-wrap: wrap;
+    }
+    .calc-op { font-size: 20px; color: #f7768e; font-weight: bold; }
+
+    .formula-area {
+      margin-top: 14px; text-align: center; min-height: 60px;
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+    }
+    .formula-step {
+      font-family: 'Consolas','Monaco',monospace; font-size: 16px;
+      background: #24283b; padding: 10px 24px; border-radius: 8px;
+      display: flex; align-items: center; gap: 8px; min-height: 42px;
+      flex-wrap: wrap; justify-content: center;
+    }
+    .formula-step .fv { padding: 3px 10px; border-radius: 6px; font-weight: bold; font-size: 17px; }
+    .formula-step .fv-a { background: #9ece6a; color: #1a1b26; }
+    .formula-step .fv-b { background: #7aa2f7; color: #1a1b26; }
+    .formula-step .fv-c { background: #bb9af7; color: #1a1b26; }
+    .formula-step .fop { color: #f7768e; font-weight: bold; font-size: 18px; }
+    .running-sum {
+      font-family: monospace; font-size: 13px; color: #a9b1d6; min-height: 18px;
+    }
+    .running-sum .rs-result { color: #9ece6a; font-weight: bold; font-size: 15px; }
+
+    .fly-layer {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 50; overflow: visible;
+    }
+    .flyer {
+      position: absolute; transform: translate(-50%, -50%);
+      padding: 4px 12px; border-radius: 9px; font-weight: 700; font-size: 16px;
+      white-space: nowrap; z-index: 100; pointer-events: none;
+      transition-property: left, top, opacity;
+      transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .flyer.f-input { background: #9ece6a; color: #1a1b26; box-shadow: 0 0 10px #9ece6a88; }
+    .flyer.f-a { background: #9ece6a; color: #1a1b26; box-shadow: 0 0 12px #9ece6aaa; font-size: 17px; }
+    .flyer.f-b { background: #7aa2f7; color: #1a1b26; box-shadow: 0 0 12px #7aa2f7aa; font-size: 17px; }
+    .flyer.f-result {
+      background: #bb9af7; color: #1a1b26; font-size: 20px;
+      box-shadow: 0 0 20px #bb9af7aa; border: 2px solid #fff;
+    }
+
+    .controls {
+      display: flex; align-items: center; justify-content: center;
+      gap: 12px; flex-wrap: wrap; margin: 14px 0;
+    }
+    button {
+      background: #7aa2f7; color: #1a1b26; border: none;
+      padding: 8px 16px; border-radius: 8px; font-weight: 600;
+      cursor: pointer; font-size: 0.85rem;
+    }
+    button:hover { background: #89b4fa; }
+    button:disabled { background: #565f89; color: #787c99; cursor: not-allowed; }
+    .speed-ctrl { display: flex; align-items: center; gap: 8px; }
+    .speed-ctrl label { color: #a9b1d6; font-size: 0.8rem; }
+    .speed-ctrl .slow-fast { color: #565f89; font-size: 0.75rem; }
+    .speed-ctrl input[type="range"] { width: 160px; }
+    .step-info { text-align: center; font-size: 0.82rem; color: #565f89; margin-bottom: 8px; }
+
+    /* ===== Compare Tab (Tab2) ===== */
+    .t2-section {
+      background: #16161e; border-radius: 12px; padding: 18px; margin-bottom: 16px;
+      border: 1px solid #3b4261;
+    }
+    .t2-section h3 {
+      margin: 0 0 12px 0; font-size: 1rem; text-align: center;
+    }
+    .t2-section h3.fc-title { color: #f7768e; }
+    .t2-section h3.cnn-title { color: #9ece6a; }
+    .t2-desc { font-size: 0.85rem; color: #a9b1d6; line-height: 1.6; margin-bottom: 14px; text-align: center; }
+    .t2-center { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; margin: 12px 0; }
+    .t2-grid { display: inline-grid; gap: 2px; }
+    .t2-grid .tc {
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 4px; font-size: 11px; font-weight: 600;
+    }
+    .t2-grid .tc.in { background: #9ece6a; color: #1a1b26; }
+    .t2-grid .tc.w  { background: #7aa2f7; color: #1a1b26; }
+    .t2-grid .tc.out { background: #3b4261; color: #565f89; }
+    .t2-grid .tc.out.filled { background: #bb9af7; color: #1a1b26; }
+    .t2-grid .tc.hl  { background: #4a6a3a; color: #9ece6a; border: 2px solid #9ece6a; }
+    .t2-op { color: #f7768e; font-weight: bold; font-size: 18px; }
+    .t2-arrow { color: #73daca; font-size: 20px; }
+    .t2-param {
+      margin-top: 12px; padding: 10px 16px; background: #24283b; border-radius: 8px;
+      text-align: center; font-family: monospace;
+    }
+    .t2-param .num { color: #9ece6a; font-size: 1.15rem; font-weight: bold; }
+    .t2-param .lbl { color: #565f89; font-size: 0.8rem; margin-top: 3px; }
+
+    /* Multi-kernel area */
+    .t2-config { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+    .t2-config label { color: #a9b1d6; font-size: 0.85rem; }
+    .t2-config select {
+      background: #16161e; color: #9ece6a; border: 1px solid #3b4261;
+      padding: 5px 10px; border-radius: 6px; font-weight: 600;
+    }
+    .t2-config .val { color: #9ece6a; font-weight: bold; }
+    .t2-status {
+      text-align: center; font-size: 0.9rem; color: #73daca; min-height: 24px;
+      margin: 10px 0; font-family: monospace;
+    }
+    .t2-kernel-row {
+      display: flex; align-items: flex-start; justify-content: center;
+      gap: 20px; flex-wrap: wrap; margin: 10px 0;
+    }
+    .t2-kernel-card {
+      background: #24283b; border-radius: 10px; padding: 10px; text-align: center;
+      border: 2px solid #3b4261; min-width: 80px; transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .t2-kernel-card.active-k {
+      border-color: #f7768e; box-shadow: 0 0 16px #f7768e66;
+    }
+    .t2-kernel-card.done-k {
+      border-color: #9ece6a; box-shadow: 0 0 8px #9ece6a44;
+    }
+    .t2-kernel-card .k-label {
+      font-size: 0.75rem; color: #a9b1d6; margin-bottom: 4px;
+    }
+    .t2-kernel-card .k-label .k-color {
+      display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle;
+    }
+    .t2-fmaps {
+      display: flex; align-items: flex-start; justify-content: center;
+      gap: 16px; flex-wrap: wrap; margin: 10px 0;
+    }
+    .t2-fmap-card {
+      text-align: center; opacity: 0.3; transition: opacity 0.4s;
+    }
+    .t2-fmap-card.visible { opacity: 1; }
+    .t2-fmap-card .fm-label { font-size: 0.72rem; color: #a9b1d6; margin-top: 3px; }
+
+    .t2-explosion {
+      margin-top: 16px; background: #24283b; border-radius: 10px; padding: 14px;
+    }
+    .t2-explosion h4 { color: #bb9af7; margin: 0 0 10px 0; font-size: 0.9rem; text-align: center; }
+    .t2-explosion table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .t2-explosion th, .t2-explosion td { padding: 7px 8px; text-align: center; border-bottom: 1px solid #3b4261; }
+    .t2-explosion th { color: #73daca; }
+    .t2-explosion td.num { color: #9ece6a; font-family: monospace; }
+    .t2-explosion tr:hover td { background: #16161e; }
+
+    @keyframes slide-win {
+      0% { opacity: 1; } 100% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+<div class="container" id="animContainer">
+  <h1>二维卷积动画演示</h1>
+  <p class="subtitle">卷积核在输入上滑动 → 逐元素相乘求和 → 组成输出特征图</p>
+
+  <div class="tabs">
+    <button type="button" class="tab-btn active" data-tab="tabConv">卷积滑动演示</button>
+    <button type="button" class="tab-btn" data-tab="tabCompare">全连接 vs 多卷积核对比</button>
+  </div>
+
+  <!-- ========== TAB 1 ========== -->
+  <div class="tab-content active" id="tabConv">
+
+    <div class="config-bar">
+      <label>输入大小：</label>
+      <input type="number" id="selInput" min="2" value="5" style="width:60px;background:#16161e;color:#9ece6a;border:1px solid #3b4261;padding:5px 8px;border-radius:6px;font-size:0.9rem;font-weight:600;">
+      <label>卷积核大小：</label>
+      <input type="number" id="selKernel" min="1" value="3" style="width:60px;background:#16161e;color:#9ece6a;border:1px solid #3b4261;padding:5px 8px;border-radius:6px;font-size:0.9rem;font-weight:600;">
+      <span class="size-formula" id="sizeFormula">输出 = 5−3+1 = 3×3</span>
+      <button type="button" id="btnApply">应用 / 重新生成</button>
+    </div>
+
+    <div class="step-info" id="stepInfo">滑块位置: (0,0) — 点击「下一步」开始</div>
+
+    <div class="panel">
+      <div class="top-row">
+        <div class="board">
+          <div class="grid" id="inputGrid"></div>
+          <div class="board-label" id="lblInput">输入 (5×5)</div>
+        </div>
+        <div class="arrow-sep">→</div>
+        <div class="board">
+          <div class="grid" id="outputGrid"></div>
+          <div class="board-label" id="lblOutput">输出 (3×3)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="calc-panel">
+      <h3 id="calcTitle">计算过程：输入块 ⊙ 卷积核 → 逐元素相乘后求和</h3>
+      <div class="calc-row">
+        <div>
+          <div class="grid" id="patchGrid"></div>
+          <div class="board-label" style="color:#9ece6a;" id="lblPatch">当前输入块</div>
+        </div>
+        <span class="calc-op">⊙</span>
+        <div>
+          <div class="grid" id="kernelGrid"></div>
+          <div class="board-label" style="color:#7aa2f7;" id="lblKernel">卷积核</div>
+        </div>
+        <span class="calc-op">=</span>
+        <div>
+          <div class="grid" id="productGrid"></div>
+          <div class="board-label" style="color:#bb9af7;">乘积</div>
+        </div>
+      </div>
+      <div class="formula-area">
+        <div class="formula-step" id="formulaStep"><span style="color:#565f89;">等待开始…</span></div>
+        <div class="running-sum" id="runningSum"></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="btnPrev">上一步</button>
+      <button id="btnPlay">自动播放</button>
+      <button id="btnNext">下一步</button>
+      <button id="btnReset">重置</button>
+      <div class="speed-ctrl">
+        <span class="slow-fast">慢</span>
+        <input type="range" id="speedSlider" min="0" max="100" value="50" step="1" title="左慢右快">
+        <span class="slow-fast">快</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>结论</h2>
+      <ul style="color:#a9b1d6;line-height:1.6;font-size:0.85rem;">
+        <li>每次滑动：卷积核与重叠输入块做「逐元素相乘后求和」→ 一个标量 → 写入输出对应位置。</li>
+        <li>最终结果：所有位置的标量组成一张<strong>输出特征图</strong>。</li>
+        <li>输出大小 = 输入大小 − 卷积核大小 + 1。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ========== TAB 2: 全连接 vs 多卷积核 ========== -->
+  <div class="tab-content" id="tabCompare">
+    <div class="panel">
+      <h2>全连接 vs 多卷积核 — 参数量对比</h2>
+      <p style="color:#a9b1d6;font-size:0.85rem;margin-bottom:4px;">全连接：一个神经元 = 一套与输入同大小的权重。CNN：每个卷积核 = 一个「专业员工」，用小得多的参数提取一种特征。</p>
+    </div>
+
+    <!-- ===== Part A: 全连接 ===== -->
+    <div class="t2-section">
+      <h3 class="fc-title">Part A：全连接方式 — 一个神经元</h3>
+      <div class="t2-desc">输入 <span id="t2FcInSize">5×5</span>，权重也是 <span id="t2FcWSize">5×5</span>，逐元素相乘求和 → <strong>1 个</strong>输出值</div>
+      <div class="t2-center">
+        <div><div class="t2-grid" id="t2FcInput"></div><div style="text-align:center;font-size:0.72rem;color:#a9b1d6;margin-top:3px;">输入</div></div>
+        <span class="t2-op">⊙</span>
+        <div><div class="t2-grid" id="t2FcWeight"></div><div style="text-align:center;font-size:0.72rem;color:#a9b1d6;margin-top:3px;">权重</div></div>
+        <span class="t2-op">=</span>
+        <div style="text-align:center;">
+          <div class="t2-grid" id="t2FcOut" style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:#bb9af7;color:#1a1b26;border-radius:6px;font-size:14px;font-weight:bold;">?</div>
+          <div style="font-size:0.72rem;color:#a9b1d6;margin-top:3px;">输出</div>
+        </div>
+      </div>
+      <div class="t2-param">
+        <div class="num" id="t2FcParamNum">25</div>
+        <div class="lbl" id="t2FcParamLbl">参数量 = 5×5 = 25（一个神经元）</div>
+      </div>
+      <div class="t2-desc" style="margin-top:10px;color:#f7768e;font-weight:600;">如果要多个神经元（多个特征），每个都需要完整 <span id="t2FcNxN">5×5</span> 的权重 → 参数暴增</div>
+    </div>
+
+    <!-- ===== Part B: 多卷积核 ===== -->
+    <div class="t2-section">
+      <h3 class="cnn-title">Part B：多卷积核方式 — 每个核 = 一个专业员工</h3>
+      <div class="t2-desc">同一输入，用<strong>多个小卷积核</strong>（每个只有 <span id="t2KkSize">3×3</span> = <span id="t2KkParam">9</span> 个参数），每个核提取一种特征，生成一张特征图</div>
+
+      <div class="t2-config">
+        <label>输入大小：</label>
+        <input type="number" id="t2SelInput" min="2" value="5" style="width:60px;background:#16161e;color:#9ece6a;border:1px solid #3b4261;padding:5px 8px;border-radius:6px;font-size:0.9rem;font-weight:600;">
+        <label>卷积核大小：</label>
+        <input type="number" id="t2SelKernel" min="1" value="3" style="width:60px;background:#16161e;color:#9ece6a;border:1px solid #3b4261;padding:5px 8px;border-radius:6px;font-size:0.9rem;font-weight:600;">
+        <label>卷积核数量：</label>
+        <input type="number" id="t2KernelCount" min="1" value="4" style="width:60px;background:#16161e;color:#9ece6a;border:1px solid #3b4261;padding:5px 8px;border-radius:6px;font-size:0.9rem;font-weight:600;">
+        <button type="button" id="t2BtnRun">开始演示</button>
+        <button type="button" id="t2BtnReset">重置</button>
+      </div>
+
+      <div class="t2-status" id="t2Status">点击「开始演示」查看多卷积核逐个生成特征图的动画</div>
+
+      <!-- Input + current kernel + current output -->
+      <div class="t2-center">
+        <div>
+          <div class="t2-grid" id="t2CnnInput"></div>
+          <div style="text-align:center;font-size:0.72rem;color:#a9b1d6;margin-top:3px;" id="t2CnnInLbl">输入</div>
+        </div>
+        <span class="t2-arrow">→</span>
+        <div>
+          <div class="t2-grid" id="t2CurKernel"></div>
+          <div style="text-align:center;font-size:0.72rem;color:#a9b1d6;margin-top:3px;" id="t2CurKLbl">当前卷积核</div>
+        </div>
+        <span class="t2-arrow">→</span>
+        <div>
+          <div class="t2-grid" id="t2CurOutput"></div>
+          <div style="text-align:center;font-size:0.72rem;color:#a9b1d6;margin-top:3px;" id="t2CurOutLbl">当前输出特征图</div>
+        </div>
+      </div>
+
+      <!-- All kernels row -->
+      <div style="text-align:center;font-size:0.8rem;color:#a9b1d6;margin:14px 0 6px;">所有卷积核（每个 = 一个专业员工）</div>
+      <div class="t2-kernel-row" id="t2KernelRow"></div>
+
+      <!-- All feature maps -->
+      <div style="text-align:center;font-size:0.8rem;color:#a9b1d6;margin:14px 0 6px;">生成的特征图（每个核生成一张）</div>
+      <div class="t2-fmaps" id="t2FmapRow"></div>
+
+      <!-- Param summary -->
+      <div class="t2-param">
+        <div class="num" id="t2CnnParamNum">36</div>
+        <div class="lbl" id="t2CnnParamLbl">CNN 参数量 = 4 × (3×3) = 36</div>
+        <div class="lbl" style="margin-top:6px;color:#f7768e;" id="t2VsFc">对比全连接：同样 4 个特征，全连接需要 4 × 25 = 100 个参数！</div>
+      </div>
+    </div>
+
+    <!-- Explosion table -->
+    <div class="t2-section">
+      <div class="t2-explosion">
+        <h4>参数量爆炸对比表</h4>
+        <table>
+          <thead>
+            <tr><th>特征数</th><th>全连接参数</th><th>CNN 参数</th><th>节省</th></tr>
+          </thead>
+          <tbody id="t2ExplosionBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="fly-layer" id="flyLayer"></div>
+</div>
+
+<script>
+// ============ CONFIGURABLE STATE ============
+let INS = 5, KS = 3, OUTS = 3;
+let INPUT_DATA = [], KERNEL_DATA = [];
+let winR = 0, winC = 0;
+let outputData = [];
+let animSeq = 0, isAnimating = false, autoPlayTimer = null;
+let inputCells = [], patchCells = [], kernelCells = [], productCells = [], outputCells = [];
+
+// ============ DATA GENERATION ============
+function genInput(n) {
+  return Array.from({length: n}, () => Array.from({length: n}, () => Math.floor(Math.random() * 4)));
+}
+function genKernel(k) {
+  const presets = [
+    () => Math.random() < 0.33 ? -1 : Math.random() < 0.5 ? 0 : 1,
+    () => Math.floor(Math.random() * 3) - 1
+  ];
+  const fn = presets[Math.floor(Math.random() * presets.length)];
+  return Array.from({length: k}, () => Array.from({length: k}, fn));
+}
+
+// ============ GRID BUILDER ============
+function cellPx(n) { return Math.max(28, Math.min(44, Math.floor(240 / n))); }
+
+function buildGrid(container, rows, cols, px, cells, cls) {
+  container.innerHTML = '';
+  container.style.gridTemplateColumns = `repeat(${cols}, ${px}px)`;
+  container.style.gap = '3px';
+  cells.length = 0;
+  for (let r = 0; r < rows; r++) {
+    cells[r] = [];
+    for (let c = 0; c < cols; c++) {
+      const d = document.createElement('div');
+      d.className = 'gcell ' + cls;
+      d.style.width = px + 'px'; d.style.height = px + 'px';
+      d.style.fontSize = (px > 36 ? 14 : px > 30 ? 12 : 10) + 'px';
+      d.textContent = '?';
+      container.appendChild(d);
+      cells[r][c] = d;
+    }
+  }
+}
+
+function rebuildAll() {
+  INS = Math.max(2, parseInt(document.getElementById('selInput').value) || 5);
+  KS = Math.max(1, parseInt(document.getElementById('selKernel').value) || 3);
+  if (KS >= INS) { KS = INS - 1; }
+  document.getElementById('selInput').value = INS;
+  document.getElementById('selKernel').value = KS;
+  OUTS = INS - KS + 1;
+
+  INPUT_DATA = genInput(INS);
+  KERNEL_DATA = genKernel(KS);
+  winR = 0; winC = 0;
+  outputData = Array.from({length: OUTS}, () => Array(OUTS).fill(null));
+  animSeq++; isAnimating = false; clearFlyers();
+  if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
+  document.getElementById('btnPlay').textContent = '自动播放';
+
+  const ipx = cellPx(INS), kpx = cellPx(KS), opx = cellPx(OUTS);
+  const ppx = Math.max(36, Math.min(48, Math.floor(200 / KS)));
+  const prpx = Math.max(42, Math.min(56, Math.floor(240 / KS)));
+
+  buildGrid(document.getElementById('inputGrid'), INS, INS, ipx, inputCells, 'c-input');
+  buildGrid(document.getElementById('outputGrid'), OUTS, OUTS, opx, outputCells, 'c-output');
+  buildGrid(document.getElementById('patchGrid'), KS, KS, ppx, patchCells, 'c-patch');
+  buildGrid(document.getElementById('kernelGrid'), KS, KS, ppx, kernelCells, 'c-kernel');
+  buildGrid(document.getElementById('productGrid'), KS, KS, prpx, productCells, 'c-product');
+
+  for (let r = 0; r < INS; r++) for (let c = 0; c < INS; c++)
+    inputCells[r][c].textContent = INPUT_DATA[r][c];
+  for (let r = 0; r < KS; r++) for (let c = 0; c < KS; c++)
+    kernelCells[r][c].textContent = KERNEL_DATA[r][c];
+
+  document.getElementById('lblInput').textContent = `输入 (${INS}×${INS})`;
+  document.getElementById('lblOutput').textContent = `输出 (${OUTS}×${OUTS})`;
+  document.getElementById('lblPatch').textContent = `当前输入块 (${KS}×${KS})`;
+  document.getElementById('lblKernel').textContent = `卷积核 (${KS}×${KS})`;
+  document.getElementById('sizeFormula').textContent = `输出 = ${INS}−${KS}+1 = ${OUTS}×${OUTS}`;
+
+  highlightWindow(); renderOutput();
+  updateInfo(`滑块位置: (0,0) — 点击「下一步」开始`);
+  setFormula('<span style="color:#565f89;">等待开始…</span>');
+  setSum('');
+  disableButtons(false);
+}
+
+// ============ RENDER ============
+function highlightWindow() {
+  for (let r = 0; r < INS; r++) for (let c = 0; c < INS; c++) {
+    const inW = r >= winR && r < winR + KS && c >= winC && c < winC + KS;
+    inputCells[r][c].className = inputCells[r][c].className.replace(/c-input|c-highlight/g, '').trim();
+    inputCells[r][c].classList.add(inW ? 'c-highlight' : 'c-input');
+  }
+}
+function clearPatch() {
+  for (let r = 0; r < KS; r++) for (let c = 0; c < KS; c++) {
+    patchCells[r][c].className = patchCells[r][c].className.replace(/c-patch|filled|active-cell|row-hl|dim-cell/g, 'c-patch').replace(/\s+/g,' ').trim();
+    patchCells[r][c].classList.add('c-patch');
+    patchCells[r][c].textContent = '?';
+  }
+}
+function clearProducts() {
+  for (let r = 0; r < KS; r++) for (let c = 0; c < KS; c++) {
+    const cl = productCells[r][c].classList;
+    cl.remove('filled','active-cell','dim-cell');
+    if (!cl.contains('c-product')) cl.add('c-product');
+    productCells[r][c].textContent = '?';
+  }
+}
+function clearKernelHL() {
+  for (let r = 0; r < KS; r++) for (let c = 0; c < KS; c++)
+    kernelCells[r][c].classList.remove('active-cell', 'row-hl', 'dim-cell');
+}
+function renderOutput() {
+  for (let r = 0; r < OUTS; r++) for (let c = 0; c < OUTS; c++) {
+    const isCur = r === winR && c === winC && outputData[r][c] === null;
+    outputCells[r][c].classList.remove('filled','current');
+    if (outputData[r][c] !== null) {
+      outputCells[r][c].classList.add('filled');
+      outputCells[r][c].textContent = outputData[r][c];
+    } else {
+      if (isCur) outputCells[r][c].classList.add('current');
+      outputCells[r][c].textContent = '?';
+    }
+  }
+}
+function updateInfo(t) { document.getElementById('stepInfo').textContent = t; }
+function setFormula(h) { document.getElementById('formulaStep').innerHTML = h; }
+function setSum(h) { document.getElementById('runningSum').innerHTML = h; }
+
+// ============ POSITION / TIMING ============
+function getPos(el) {
+  const cont = document.getElementById('animContainer');
+  const cr = cont.getBoundingClientRect(), er = el.getBoundingClientRect();
+  return { x: er.left + er.width/2 - cr.left, y: er.top + er.height/2 - cr.top };
+}
+// 速度滑块 0=最慢 100=最快 50=中间；左慢右快
+function spd() {
+  const v = parseInt(document.getElementById('speedSlider').value, 10);
+  const t = (100 - v) / 100;
+  return 0.15 + (2.5 - 0.15) * t;
+}
+function ms(base) { return Math.round(base * spd()); }
+function wait(t) { return new Promise(r => setTimeout(r, t)); }
+
+// ============ FLYING ============
+function clearFlyers() { document.getElementById('flyLayer').innerHTML = ''; }
+function createFlyer(text, pos, cls) {
+  const el = document.createElement('div');
+  el.className = 'flyer ' + cls; el.textContent = text;
+  el.style.left = pos.x + 'px'; el.style.top = pos.y + 'px'; el.style.opacity = '1';
+  document.getElementById('flyLayer').appendChild(el);
+  return el;
+}
+function flyTo(el, toPos, dur) {
+  return new Promise(resolve => {
+    el.style.transitionDuration = dur + 'ms';
+    void el.offsetWidth;
+    requestAnimationFrame(() => { el.style.left = toPos.x + 'px'; el.style.top = toPos.y + 'px'; });
+    setTimeout(resolve, dur);
+  });
+}
+
+// ============ DIM HELPERS ============
+function dimAllCalcCells() {
+  for (let r = 0; r < KS; r++) for (let c = 0; c < KS; c++) {
+    patchCells[r][c].classList.add('dim-cell');
+    kernelCells[r][c].classList.add('dim-cell');
+    productCells[r][c].classList.add('dim-cell');
+  }
+}
+function undimAllCalcCells() {
+  for (let r = 0; r < KS; r++) for (let c = 0; c < KS; c++) {
+    patchCells[r][c].classList.remove('dim-cell');
+    kernelCells[r][c].classList.remove('dim-cell');
+    productCells[r][c].classList.remove('dim-cell');
+  }
+}
+
+// ============ MAIN ANIMATION ============
+async function animateStep(seqId) {
+  const wr = winR, wc = winC;
+  isAnimating = true; disableButtons(true);
+
+  highlightWindow(); clearPatch(); clearProducts(); clearKernelHL(); renderOutput();
+  updateInfo(`滑块位置: (${wr},${wc}) — 正在计算…`);
+  setFormula('<span style="color:#73daca;">阶段一：数据从输入飞入下方…</span>');
+  setSum('');
+  await wait(ms(200));
+  if (animSeq !== seqId) return;
+
+  // PHASE 1: fly input → patch
+  const flyers = [];
+  for (let r = 0; r < KS; r++) for (let c = 0; c < KS; c++) {
+    const val = INPUT_DATA[wr+r][wc+c];
+    flyers.push({ r, c, val, f: createFlyer(val, getPos(inputCells[wr+r][wc+c]), 'f-input') });
+  }
+  await wait(ms(60));
+  if (animSeq !== seqId) return;
+
+  const flyPs = flyers.map((item, i) => (async () => {
+    await wait(ms(40) * i);
+    if (animSeq !== seqId) return;
+    await flyTo(item.f, getPos(patchCells[item.r][item.c]), ms(350));
+    if (animSeq !== seqId) return;
+    patchCells[item.r][item.c].classList.remove('c-patch'); patchCells[item.r][item.c].classList.add('c-patch', 'filled');
+    patchCells[item.r][item.c].textContent = item.val;
+    item.f.remove();
+  })());
+  await Promise.all(flyPs);
+  if (animSeq !== seqId) return;
+  await wait(ms(180));
+  if (animSeq !== seqId) return;
+
+  // PHASE 2: element-by-element multiply
+  setFormula('<span style="color:#73daca;">阶段二：逐元素相乘（注意红色聚焦框）…</span>');
+  let runSum = 0;
+  const products = [];
+
+  for (let r = 0; r < KS; r++) {
+    for (let c = 0; c < KS; c++) {
+      if (animSeq !== seqId) return;
+      const a = INPUT_DATA[wr+r][wc+c], b = KERNEL_DATA[r][c], p = a * b;
+      products.push(p);
+
+      // Dim everything, then un-dim + highlight current
+      dimAllCalcCells();
+      patchCells[r][c].classList.remove('dim-cell');
+      patchCells[r][c].classList.add('active-cell');
+      kernelCells[r][c].classList.remove('dim-cell');
+      kernelCells[r][c].classList.add('active-cell');
+      // Highlight same-row patches and same-row kernels lightly
+      for (let cc = 0; cc < KS; cc++) {
+        if (cc !== c) {
+          patchCells[r][cc].classList.remove('dim-cell');
+          patchCells[r][cc].classList.add('row-hl');
+          kernelCells[r][cc].classList.remove('dim-cell');
+          kernelCells[r][cc].classList.add('row-hl');
+        }
+      }
+      // Un-dim already-filled products
+      for (let pi = 0; pi < products.length - 1; pi++) {
+        const pr2 = Math.floor(pi / KS), pc2 = pi % KS;
+        productCells[pr2][pc2].classList.remove('dim-cell');
+      }
+
+      // Show formula with flying numbers
+      setFormula(`<span class="fv fv-a" id="ftA">${a}</span>
+                  <span class="fop">×</span>
+                  <span class="fv fv-b" id="ftB">${b}</span>
+                  <span class="fop">=</span>
+                  <span class="fv fv-c">${p}</span>`);
+
+      const fA = createFlyer(a, getPos(patchCells[r][c]), 'f-a');
+      const fB = createFlyer(b, getPos(kernelCells[r][c]), 'f-b');
+      await Promise.all([
+        flyTo(fA, getPos(document.getElementById('ftA')), ms(280)),
+        flyTo(fB, getPos(document.getElementById('ftB')), ms(280))
+      ]);
+      if (animSeq !== seqId) return;
+      fA.remove(); fB.remove();
+
+      productCells[r][c].classList.remove('dim-cell');
+      productCells[r][c].classList.add('filled');
+      productCells[r][c].textContent = p;
+
+      runSum += p;
+      setSum(`累计: ${products.join(' + ')} = <span class="rs-result">${runSum}</span>`);
+
+      await wait(ms(240));
+      if (animSeq !== seqId) return;
+
+      // Clear highlights for this step
+      patchCells[r][c].classList.remove('active-cell');
+      kernelCells[r][c].classList.remove('active-cell');
+      for (let cc = 0; cc < KS; cc++) {
+        patchCells[r][cc].classList.remove('row-hl');
+        kernelCells[r][cc].classList.remove('row-hl');
+      }
+      undimAllCalcCells();
+    }
+  }
+
+  // PHASE 3: fly result to output
+  await wait(ms(250));
+  if (animSeq !== seqId) return;
+  setFormula(`<span style="color:#9ece6a;font-weight:bold;font-size:17px;">最终结果 = ${runSum}</span>
+              <span style="color:#73daca;margin-left:10px;">→ 飞入输出[${wr}][${wc}]</span>`);
+  outputCells[wr][wc].classList.add('current');
+
+  const fR = createFlyer(runSum, getPos(document.getElementById('formulaStep')), 'f-result');
+  await wait(ms(80));
+  if (animSeq !== seqId) return;
+  await flyTo(fR, getPos(outputCells[wr][wc]), ms(450));
+  if (animSeq !== seqId) return;
+  fR.remove();
+
+  outputData[wr][wc] = runSum;
+  renderOutput();
+
+  if (wc < OUTS - 1) winC++;
+  else if (wr < OUTS - 1) { winR++; winC = 0; }
+
+  highlightWindow(); renderOutput();
+  updateInfo(`输出[${wr}][${wc}] = ${runSum}  ✓ — 滑块移至 (${winR},${winC})`);
+  setFormula(`<span style="color:#9ece6a;">✓ 输出[${wr}][${wc}] = ${runSum}  完成！</span>`);
+
+  isAnimating = false; disableButtons(false);
+  checkDone();
+}
+
+// ============ CONTROLS ============
+function disableButtons(d) {
+  document.getElementById('btnPrev').disabled = d;
+  document.getElementById('btnNext').disabled = d;
+}
+function checkDone() {
+  if (outputData.every(row => row.every(v => v !== null))) {
+    updateInfo(`全部完成！${OUTS*OUTS} 个输出值组成 ${OUTS}×${OUTS} 特征图`);
+    setFormula('<span style="color:#9ece6a;font-weight:bold;">全部计算完成！输出特征图已填满。</span>');
+    if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; document.getElementById('btnPlay').textContent = '自动播放'; }
+  }
+}
+function onNext() {
+  if (isAnimating) return;
+  if (outputData.every(row => row.every(v => v !== null))) return;
+  if (outputData[winR][winC] !== null) {
+    outer: for (let r = 0; r < OUTS; r++) for (let c = 0; c < OUTS; c++)
+      if (outputData[r][c] === null) { winR = r; winC = c; break outer; }
+  }
+  clearFlyers();
+  animateStep(++animSeq);
+}
+function onPrev() {
+  if (isAnimating) { animSeq++; isAnimating = false; disableButtons(false); clearFlyers(); }
+  let pr = winR, pc = winC;
+  if (outputData[pr][pc] === null) { if (pc > 0) pc--; else if (pr > 0) { pr--; pc = OUTS-1; } else return; }
+  outputData[pr][pc] = null;
+  winR = pr; winC = pc;
+  highlightWindow(); clearPatch(); clearProducts(); clearKernelHL(); renderOutput();
+  updateInfo(`滑块位置: (${winR},${winC}) — 已撤销`);
+  setFormula('<span style="color:#565f89;">等待操作…</span>'); setSum('');
+}
+function onReset() {
+  animSeq++; isAnimating = false; clearFlyers();
+  if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
+  document.getElementById('btnPlay').textContent = '自动播放';
+  winR = 0; winC = 0;
+  outputData = Array.from({length: OUTS}, () => Array(OUTS).fill(null));
+  highlightWindow(); clearPatch(); clearProducts(); clearKernelHL(); renderOutput();
+  updateInfo('滑块位置: (0,0) — 点击「下一步」开始');
+  setFormula('<span style="color:#565f89;">等待开始…</span>'); setSum('');
+  disableButtons(false);
+}
+function onPlayPause() {
+  if (autoPlayTimer) {
+    clearInterval(autoPlayTimer); autoPlayTimer = null;
+    document.getElementById('btnPlay').textContent = '自动播放'; return;
+  }
+  document.getElementById('btnPlay').textContent = '暂停';
+  autoPlayTimer = setInterval(() => {
+    if (outputData.every(row => row.every(v => v !== null)) || isAnimating) {
+      if (outputData.every(row => row.every(v => v !== null))) {
+        clearInterval(autoPlayTimer); autoPlayTimer = null;
+        document.getElementById('btnPlay').textContent = '自动播放';
+      }
+      return;
+    }
+    onNext();
+  }, ms(1200) + 3500);
+}
+
+// ============ CONFIG EVENTS ============
+function updateSizeFormula() {
+  const i = Math.max(2, parseInt(document.getElementById('selInput').value) || 5);
+  let k = Math.max(1, parseInt(document.getElementById('selKernel').value) || 3);
+  if (k >= i) k = i - 1;
+  const o = i - k + 1;
+  document.getElementById('sizeFormula').textContent = `输出 = ${i}−${k}+1 = ${o}×${o}`;
+}
+document.getElementById('selInput').addEventListener('input', updateSizeFormula);
+document.getElementById('selKernel').addEventListener('input', updateSizeFormula);
+document.getElementById('btnApply').addEventListener('click', rebuildAll);
+
+// ============ TABS ============
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(btn.getAttribute('data-tab')).classList.add('active');
+    btn.classList.add('active');
+    if (btn.getAttribute('data-tab') === 'tabCompare') updateCompareTab();
+  });
+});
+
+// ============ TAB 2: COMPARE ============
+const KERNEL_COLORS = ['#7aa2f7','#f7768e','#9ece6a','#ff9e64','#bb9af7','#73daca','#e0af68','#7dcfff'];
+let t2Kernels = [], t2FmapData = [], t2Seq = 0, t2Running = false;
+let t2InputCells = [], t2CurKernelCells = [], t2CurOutputCells = [];
+
+function t2BuildGrid(container, rows, cols, px, cls) {
+  container.innerHTML = '';
+  container.style.gridTemplateColumns = `repeat(${cols}, ${px}px)`;
+  container.style.gap = '2px';
+  const cells = [];
+  for (let r = 0; r < rows; r++) { cells[r] = []; for (let c = 0; c < cols; c++) {
+    const d = document.createElement('div');
+    d.className = 'tc ' + cls;
+    d.style.width = px + 'px'; d.style.height = px + 'px';
+    d.style.fontSize = (px > 28 ? 11 : 9) + 'px';
+    d.textContent = '?'; container.appendChild(d); cells[r][c] = d;
+  }} return cells;
+}
+
+function t2SmallGrid(container, rows, cols, px, data, cls) {
+  container.innerHTML = '';
+  container.style.gridTemplateColumns = `repeat(${cols}, ${px}px)`;
+  container.style.gap = '2px';
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const d = document.createElement('div');
+    d.className = 'tc ' + cls;
+    d.style.width = px + 'px'; d.style.height = px + 'px';
+    d.style.fontSize = (px > 20 ? 9 : 7) + 'px';
+    d.textContent = data[r][c]; container.appendChild(d);
+  }
+}
+
+let t2INS = 5, t2KS = 3, t2OUTS = 3;
+let t2INPUT = [];
+
+function updateCompareTab() {
+  t2INS = Math.max(2, parseInt(document.getElementById('t2SelInput').value) || 5);
+  t2KS = Math.max(1, parseInt(document.getElementById('t2SelKernel').value) || 3);
+  if (t2KS >= t2INS) t2KS = t2INS - 1;
+  document.getElementById('t2SelInput').value = t2INS;
+  document.getElementById('t2SelKernel').value = t2KS;
+  t2OUTS = t2INS - t2KS + 1;
+  t2INPUT = genInput(t2INS);
+
+  const kp = t2KS * t2KS, fcP = t2INS * t2INS;
+  // Part A
+  document.getElementById('t2FcInSize').textContent = `${t2INS}×${t2INS}`;
+  document.getElementById('t2FcWSize').textContent = `${t2INS}×${t2INS}`;
+  document.getElementById('t2FcNxN').textContent = `${t2INS}×${t2INS}`;
+  const fcPx = Math.max(14, Math.min(32, Math.floor(200 / t2INS)));
+  const fcIn = document.getElementById('t2FcInput');
+  t2SmallGrid(fcIn, t2INS, t2INS, fcPx, t2INPUT, 'in');
+  const fcW = [];
+  for (let r = 0; r < t2INS; r++) { fcW[r] = []; for (let c = 0; c < t2INS; c++) fcW[r][c] = (r+c)%2; }
+  t2SmallGrid(document.getElementById('t2FcWeight'), t2INS, t2INS, fcPx, fcW, 'w');
+  let dot = 0;
+  for (let r = 0; r < t2INS; r++) for (let c = 0; c < t2INS; c++) dot += t2INPUT[r][c] * fcW[r][c];
+  document.getElementById('t2FcOut').textContent = dot;
+  document.getElementById('t2FcParamNum').textContent = fcP;
+  document.getElementById('t2FcParamLbl').textContent = `参数量 = ${t2INS}×${t2INS} = ${fcP}（一个神经元）`;
+
+  // Part B: generate kernels
+  const N = Math.max(1, parseInt(document.getElementById('t2KernelCount').value) || 4);
+  t2Kernels = [];
+  for (let i = 0; i < N; i++) t2Kernels.push(genKernel(t2KS));
+  t2FmapData = [];
+
+  document.getElementById('t2KkSize').textContent = `${t2KS}×${t2KS}`;
+  document.getElementById('t2KkParam').textContent = kp;
+
+  // Input grid
+  const ipx = Math.max(14, Math.min(32, Math.floor(200 / t2INS)));
+  t2InputCells = t2BuildGrid(document.getElementById('t2CnnInput'), t2INS, t2INS, ipx, 'in');
+  for (let r = 0; r < t2INS; r++) for (let c = 0; c < t2INS; c++) t2InputCells[r][c].textContent = t2INPUT[r][c];
+  document.getElementById('t2CnnInLbl').textContent = `输入 (${t2INS}×${t2INS})`;
+
+  // Current kernel area
+  const kpx = Math.max(20, Math.min(40, Math.floor(160 / t2KS)));
+  t2CurKernelCells = t2BuildGrid(document.getElementById('t2CurKernel'), t2KS, t2KS, kpx, 'w');
+  for (let r = 0; r < t2KS; r++) for (let c = 0; c < t2KS; c++) t2CurKernelCells[r][c].textContent = '?';
+  document.getElementById('t2CurKLbl').textContent = `当前卷积核 (${t2KS}×${t2KS})`;
+
+  // Current output area
+  const opx = Math.max(14, Math.min(34, Math.floor(160 / t2OUTS)));
+  t2CurOutputCells = t2BuildGrid(document.getElementById('t2CurOutput'), t2OUTS, t2OUTS, opx, 'out');
+  document.getElementById('t2CurOutLbl').textContent = `当前输出特征图 (${t2OUTS}×${t2OUTS})`;
+
+  // Kernel cards
+  const row = document.getElementById('t2KernelRow'); row.innerHTML = '';
+  for (let i = 0; i < N; i++) {
+    const card = document.createElement('div');
+    card.className = 't2-kernel-card'; card.id = `t2KCard${i}`;
+    const color = KERNEL_COLORS[i % KERNEL_COLORS.length];
+    card.innerHTML = `<div class="k-label"><span class="k-color" style="background:${color}"></span>核${i+1}</div>`;
+    const g = document.createElement('div');
+    g.className = 't2-grid'; g.id = `t2KGrid${i}`;
+    const skpx = Math.max(14, Math.min(24, Math.floor(80 / t2KS)));
+    t2SmallGrid(g, t2KS, t2KS, skpx, t2Kernels[i], 'w');
+    card.appendChild(g); row.appendChild(card);
+  }
+
+  // Feature map placeholders
+  const fRow = document.getElementById('t2FmapRow'); fRow.innerHTML = '';
+  for (let i = 0; i < N; i++) {
+    const card = document.createElement('div');
+    card.className = 't2-fmap-card'; card.id = `t2Fmap${i}`;
+    const color = KERNEL_COLORS[i % KERNEL_COLORS.length];
+    const g = document.createElement('div');
+    g.className = 't2-grid'; g.id = `t2FmGrid${i}`;
+    const fmpx = Math.max(12, Math.min(26, Math.floor(100 / t2OUTS)));
+    g.style.gridTemplateColumns = `repeat(${t2OUTS}, ${fmpx}px)`; g.style.gap = '2px';
+    for (let r = 0; r < t2OUTS; r++) for (let c = 0; c < t2OUTS; c++) {
+      const d = document.createElement('div');
+      d.className = 'tc out'; d.style.width = fmpx+'px'; d.style.height = fmpx+'px';
+      d.style.fontSize = (fmpx > 16 ? 8 : 6) + 'px'; d.textContent = '?'; g.appendChild(d);
+    }
+    card.appendChild(g);
+    card.innerHTML += `<div class="fm-label" style="color:${color};">特征图 ${i+1}</div>`;
+    fRow.appendChild(card);
+  }
+
+  // Params
+  document.getElementById('t2CnnParamNum').textContent = (N * kp).toLocaleString();
+  document.getElementById('t2CnnParamLbl').textContent = `CNN 参数量 = ${N} × (${t2KS}×${t2KS}) = ${N * kp}`;
+  document.getElementById('t2VsFc').textContent = `对比全连接：同样 ${N} 个特征，全连接需要 ${N} × ${fcP} = ${N*fcP} 个参数！`;
+
+  // Explosion table
+  const tbody = document.getElementById('t2ExplosionBody'); tbody.innerHTML = '';
+  [2,4,8,16,32,64,128,256].forEach(n => {
+    const cP = n * kp, fP = n * fcP, save = Math.round((1 - cP/fP) * 100);
+    tbody.innerHTML += `<tr><td>${n}</td><td class="num">${fP.toLocaleString()}</td><td class="num">${cP.toLocaleString()}</td><td class="num" style="color:#9ece6a;">${save}%</td></tr>`;
+  });
+
+  document.getElementById('t2Status').textContent = '点击「开始演示」查看多卷积核逐个生成特征图的动画';
+}
+
+// ===== Tab2 Animation =====
+async function t2Animate(seqId) {
+  t2Running = true;
+  const N = t2Kernels.length;
+  const outPx = t2CurOutputCells[0] ? parseInt(t2CurOutputCells[0][0].style.width) : 26;
+
+  for (let ki = 0; ki < N; ki++) {
+    if (t2Seq !== seqId) return;
+    const kernel = t2Kernels[ki];
+    const color = KERNEL_COLORS[ki % KERNEL_COLORS.length];
+
+    // Highlight current kernel card
+    for (let j = 0; j < N; j++) {
+      const card = document.getElementById(`t2KCard${j}`);
+      card.className = 't2-kernel-card' + (j === ki ? ' active-k' : j < ki ? ' done-k' : '');
+    }
+
+    // Fill current kernel display
+    for (let r = 0; r < t2KS; r++) for (let c = 0; c < t2KS; c++) {
+      t2CurKernelCells[r][c].textContent = kernel[r][c];
+      t2CurKernelCells[r][c].style.background = color;
+    }
+    document.getElementById('t2CurKLbl').textContent = `卷积核 ${ki+1} (${t2KS}×${t2KS})`;
+
+    // Clear current output
+    for (let r = 0; r < t2OUTS; r++) for (let c = 0; c < t2OUTS; c++) {
+      t2CurOutputCells[r][c].textContent = '?';
+      t2CurOutputCells[r][c].classList.remove('filled');
+    }
+
+    document.getElementById('t2Status').innerHTML = `<span style="color:${color};">卷积核 ${ki+1}/${N}</span> 正在滑动输入，生成特征图 ${ki+1}…`;
+    await wait(ms(300));
+    if (t2Seq !== seqId) return;
+
+    // Slide the window across input and fill output
+    const fmapVals = Array.from({length: t2OUTS}, () => Array(t2OUTS).fill(0));
+    for (let wr = 0; wr < t2OUTS; wr++) {
+      for (let wc = 0; wc < t2OUTS; wc++) {
+        if (t2Seq !== seqId) return;
+        for (let r = 0; r < t2INS; r++) for (let c = 0; c < t2INS; c++) {
+          const inW = r >= wr && r < wr+t2KS && c >= wc && c < wc+t2KS;
+          t2InputCells[r][c].className = 'tc ' + (inW ? 'hl' : 'in');
+        }
+        let sum = 0;
+        for (let r = 0; r < t2KS; r++) for (let c = 0; c < t2KS; c++)
+          sum += t2INPUT[wr+r][wc+c] * kernel[r][c];
+        fmapVals[wr][wc] = sum;
+
+        t2CurOutputCells[wr][wc].textContent = sum;
+        t2CurOutputCells[wr][wc].classList.add('filled');
+        t2CurOutputCells[wr][wc].style.background = color;
+        t2CurOutputCells[wr][wc].style.color = '#1a1b26';
+
+        await wait(ms(100));
+        if (t2Seq !== seqId) return;
+      }
+    }
+
+    // Reset input highlight
+    for (let r = 0; r < t2INS; r++) for (let c = 0; c < t2INS; c++)
+      t2InputCells[r][c].className = 'tc in';
+
+    // Copy result to the feature map card
+    t2FmapData.push(fmapVals);
+    const fmGrid = document.getElementById(`t2FmGrid${ki}`);
+    if (fmGrid) {
+      const cells = fmGrid.querySelectorAll('.tc');
+      let idx = 0;
+      for (let r = 0; r < t2OUTS; r++) for (let c = 0; c < t2OUTS; c++) {
+        if (cells[idx]) {
+          cells[idx].textContent = fmapVals[r][c];
+          cells[idx].classList.add('filled');
+          cells[idx].style.background = color; cells[idx].style.color = '#1a1b26';
+        }
+        idx++;
+      }
+    }
+    const fmCard = document.getElementById(`t2Fmap${ki}`);
+    if (fmCard) fmCard.classList.add('visible');
+
+    document.getElementById(`t2KCard${ki}`).className = 't2-kernel-card done-k';
+
+    document.getElementById('t2Status').innerHTML = `<span style="color:${color};">✓ 卷积核 ${ki+1}</span> 完成 → 特征图 ${ki+1} 已生成`;
+    await wait(ms(500));
+    if (t2Seq !== seqId) return;
+  }
+
+  document.getElementById('t2Status').innerHTML = `<span style="color:#9ece6a;font-weight:bold;">全部 ${N} 个卷积核完成！生成了 ${N} 张 ${t2OUTS}×${t2OUTS} 特征图</span><br><span style="color:#f7768e;">CNN 参数量 = ${N * t2KS * t2KS}  vs  全连接 = ${N * t2INS * t2INS}  →  节省 ${Math.round((1 - t2KS*t2KS/(t2INS*t2INS)) * 100)}%</span>`;
+  t2Running = false;
+}
+
+function t2Reset() {
+  t2Seq++; t2Running = false;
+  updateCompareTab();
+}
+
+document.getElementById('t2BtnRun').addEventListener('click', () => {
+  if (t2Running) return;
+  t2Reset();
+  setTimeout(() => t2Animate(++t2Seq), 100);
+});
+document.getElementById('t2BtnReset').addEventListener('click', t2Reset);
+document.getElementById('t2KernelCount').addEventListener('change', t2Reset);
+document.getElementById('t2SelInput').addEventListener('change', t2Reset);
+document.getElementById('t2SelKernel').addEventListener('change', t2Reset);
+
+// ============ BIND ============
+document.getElementById('btnNext').addEventListener('click', onNext);
+document.getElementById('btnPrev').addEventListener('click', onPrev);
+document.getElementById('btnReset').addEventListener('click', onReset);
+document.getElementById('btnPlay').addEventListener('click', onPlayPause);
+
+// ============ INIT ============
+rebuildAll();
+</script>
+</body>
+</html>
