@@ -361,7 +361,10 @@
         <div class="num" id="t2FcParamNum">25</div>
         <div class="lbl" id="t2FcParamLbl">参数量 = 5×5 = 25（一个神经元）</div>
       </div>
-      <div class="t2-desc" style="margin-top:10px;color:#f7768e;font-weight:600;">如果要多个神经元（多个特征），每个都需要完整 <span id="t2FcNxN">5×5</span> 的权重 → 参数暴增</div>
+      <div class="t2-desc" style="margin-top:10px;color:#f7768e;font-weight:600;">
+        全连接产出一张特征图需要 <span id="t2FcNxN">5×5</span> 的输出位置数 × <span id="t2FcNxN2">5×5</span> 的权重 = 每张特征图的参数量暴增！<br>
+        而 CNN 通过<strong>权重共享</strong>（同一个核复用在所有位置），一个核只需 K×K 个参数就能产出一整张特征图。
+      </div>
     </div>
 
     <!-- ===== Part B: 多卷积核 ===== -->
@@ -419,10 +422,10 @@
     <!-- Explosion table -->
     <div class="t2-section">
       <div class="t2-explosion">
-        <h4>参数量爆炸对比表</h4>
+        <h4>参数量爆炸对比表（产出相同数量的特征图）</h4>
         <table>
           <thead>
-            <tr><th>特征数</th><th>全连接参数</th><th>CNN 参数</th><th>节省</th></tr>
+            <tr><th>特征图数</th><th>全连接参数<br><span style="font-weight:normal;font-size:0.7rem;">n × OUTS² × INS²</span></th><th>CNN 参数<br><span style="font-weight:normal;font-size:0.7rem;">n × K²（权重共享）</span></th><th>节省</th></tr>
           </thead>
           <tbody id="t2ExplosionBody"></tbody>
         </table>
@@ -889,7 +892,9 @@ function updateCompareTab() {
   for (let r = 0; r < t2INS; r++) for (let c = 0; c < t2INS; c++) dot += t2INPUT[r][c] * fcW[r][c];
   document.getElementById('t2FcOut').textContent = dot;
   document.getElementById('t2FcParamNum').textContent = fcP;
-  document.getElementById('t2FcParamLbl').textContent = `参数量 = ${t2INS}×${t2INS} = ${fcP}（一个神经元）`;
+  document.getElementById('t2FcParamLbl').textContent = `参数量 = ${t2INS}×${t2INS} = ${fcP}（一个神经元 → 一个输出值）`;
+  const t2NxN2 = document.getElementById('t2FcNxN2');
+  if (t2NxN2) t2NxN2.textContent = `${t2INS}×${t2INS}`;
 
   // Part B: generate kernels
   const N = Math.max(1, parseInt(document.getElementById('t2KernelCount').value) || 4);
@@ -951,15 +956,24 @@ function updateCompareTab() {
     fRow.appendChild(card);
   }
 
-  // Params
-  document.getElementById('t2CnnParamNum').textContent = (N * kp).toLocaleString();
-  document.getElementById('t2CnnParamLbl').textContent = `CNN 参数量 = ${N} × (${t2KS}×${t2KS}) = ${N * kp}`;
-  document.getElementById('t2VsFc').textContent = `对比全连接：同样 ${N} 个特征，全连接需要 ${N} × ${fcP} = ${N*fcP} 个参数！`;
+  // Params — fair comparison:
+  // CNN: 1 kernel (KS² params) → 1 feature map (OUTS² values) via weight sharing
+  // FC:  to produce same OUTS² values → needs OUTS² neurons × INS² params each
+  const cnnTotal = N * kp;
+  const fcFair = N * t2OUTS * t2OUTS * fcP;
+  document.getElementById('t2CnnParamNum').textContent = cnnTotal.toLocaleString();
+  document.getElementById('t2CnnParamLbl').textContent =
+    `CNN 参数量 = ${N}核 × ${t2KS}×${t2KS} = ${cnnTotal}（权重共享：同一核在所有位置复用）`;
+  document.getElementById('t2VsFc').textContent =
+    `对比全连接：同样产出 ${N} 张 ${t2OUTS}×${t2OUTS} 特征图，全连接需要 ${N}×${t2OUTS*t2OUTS}×${fcP} = ${fcFair.toLocaleString()} 个参数！`;
 
   // Explosion table
   const tbody = document.getElementById('t2ExplosionBody'); tbody.innerHTML = '';
+  const outSq = t2OUTS * t2OUTS;
   [2,4,8,16,32,64,128,256].forEach(n => {
-    const cP = n * kp, fP = n * fcP, save = Math.round((1 - cP/fP) * 100);
+    const cP = n * kp;
+    const fP = n * outSq * fcP;
+    const save = fP > 0 ? Math.round((1 - cP/fP) * 100) : 0;
     tbody.innerHTML += `<tr><td>${n}</td><td class="num">${fP.toLocaleString()}</td><td class="num">${cP.toLocaleString()}</td><td class="num" style="color:#9ece6a;">${save}%</td></tr>`;
   });
 
