@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>YOLOv11 卷积 stride=2 降维动画 + 真实架构图解</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a1a;color:#e0e0e0;font-family:'Segoe UI',sans-serif}
+.container{max-width:1400px;margin:0 auto;padding:10px}
+h1{text-align:center;color:#7ecfff;font-size:22px;margin-bottom:4px}
+.subtitle{text-align:center;color:#888;font-size:12px;margin-bottom:10px}
+.tabs{display:flex;justify-content:center;gap:8px;margin-bottom:10px}
+.tabs button{background:#1a2a3c;color:#7ecfff;border:1px solid #2a4a6c;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:13px}
+.tabs button.active{background:#2a5a8c;border-color:#4a8acc}
+.panel{display:none}
+.panel.active{display:block}
+.ctrl-row{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.ctrl-row label{font-size:12px;color:#aaa}
+.ctrl-row select,.ctrl-row input{background:#1a2a3c;color:#7ecfff;border:1px solid #2a4a6c;padding:3px 8px;border-radius:4px;font-size:12px;width:65px}
+.ctrl-row button{background:#2a5a8c;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-size:12px}
+.ctrl-row button:hover{background:#3a7acc}
+canvas{display:block;margin:0 auto;border-radius:8px;border:1px solid #1a2a3a}
+.explain{background:#111827;border:1px solid #1f2937;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:12px;line-height:1.7}
+.explain h3{color:#7ecfff;margin-bottom:4px;font-size:14px}
+.hl{color:#ffa94d;font-weight:bold}
+.hl2{color:#51cf66;font-weight:bold}
+.hl3{color:#ff6b6b;font-weight:bold}
+.source-link{text-align:center;margin:6px 0;font-size:11px}
+.source-link a{color:#4a9eff}
+#archCanvas{cursor:default}
+.arch-nav{display:flex;justify-content:center;gap:8px;margin:8px 0}
+.arch-nav button{background:#1a2a3c;color:#aaa;border:1px solid #2a4a6c;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px}
+.arch-nav button.active{background:#2a5a8c;color:#7ecfff;border-color:#4a8acc}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>YOLOv11 卷积降维原理 + 真实网络架构图解</h1>
+<p class="subtitle">Tab 1：stride=2 卷积动画 | Tab 2：YOLO11 官方架构逐层图解（每个张量/卷积核都画出来）</p>
+
+<div class="tabs">
+  <button class="active" onclick="showTab(0)">动画：stride=2 卷积缩小图片</button>
+  <button onclick="showTab(1)">YOLO11 逐层图解（官方数据）</button>
+</div>
+
+<!-- ===== Tab 1 ===== -->
+<div class="panel active" id="panel0">
+<div class="ctrl-row">
+  <label>输入尺寸:</label>
+  <select id="inputSize"><option value="8">8×8</option><option value="10">10×10</option><option value="12" selected>12×12</option><option value="16">16×16</option></select>
+  <label>stride:</label>
+  <select id="strideSize"><option value="1">1(不缩小)</option><option value="2" selected>2(缩小一半)</option></select>
+  <label>速度:</label>
+  <select id="speed"><option value="600">慢</option><option value="300" selected>中</option><option value="100">快</option></select>
+  <button onclick="startAnim()">▶ 开始</button>
+  <button onclick="resetAnim()">↺ 重置</button>
+</div>
+<canvas id="convCanvas" width="1280" height="500"></canvas>
+<div class="explain" id="convExplain">
+  <h3>操作说明</h3>
+  <p><span class="hl">蓝色粗框</span> = 3×3 卷积核的当前位置 | <span class="hl2">绿色高亮</span> = 被覆盖的像素 | <span class="hl3">红色高亮</span> = 输出结果位置</p>
+  <p>stride=2 时卷积核每次跳 <b>2 格</b>，输出 = (N−3+2)/2+1 = <b>N/2</b>，正好缩小一半</p>
+</div>
+</div>
+
+<!-- ===== Tab 2 ===== -->
+<div class="panel" id="panel1">
+<div class="source-link">
+  数据来源：<a href="https://github.com/ultralytics/ultralytics/blob/main/ultralytics/cfg/models/11/yolo11.yaml" target="_blank">ultralytics GitHub 官方 yolo11.yaml</a>（YOLO11n: depth=0.50, width=0.25）
+</div>
+<div class="arch-nav">
+  <button class="active" onclick="showLayer(0)">层0: Conv 640→320</button>
+  <button onclick="showLayer(1)">层1: Conv 320→160</button>
+  <button onclick="showLayer(2)">层2: C3k2 @160</button>
+  <button onclick="showLayer(3)">层3: Conv 160→80</button>
+  <button onclick="showLayer(4)">层4-6: @80, @40</button>
+  <button onclick="showLayer(5)">层7-10: SPPF+C2PSA</button>
+  <button onclick="showLayer(6)">Neck+Head 总览</button>
+</div>
+<canvas id="archCanvas" width="1380" height="680"></canvas>
+<div class="explain" id="archExplain"></div>
+</div>
+</div>
+
+<script>
+function showTab(idx){
+  document.querySelectorAll('.panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
+  document.querySelectorAll('.tabs button').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  if(idx===1) showLayer(currentLayer);
+}
+
+// ==================== TAB 1: Stride Conv Animation ====================
+const cc=document.getElementById('convCanvas'), cx=cc.getContext('2d');
+let animTimer=null, inputGrid=[], kernel=[], outputGrid=[];
+let curRow=0,curCol=0,N=12,K=3,S=2,pad=1,outN=0,isRunning=false;
+
+function initGrids(){
+  N=parseInt(document.getElementById('inputSize').value);
+  S=parseInt(document.getElementById('strideSize').value);
+  K=3; pad=1;
+  outN=Math.floor((N-K+2*pad)/S)+1;
+  inputGrid=[]; for(let r=0;r<N;r++){inputGrid[r]=[];for(let c=0;c<N;c++) inputGrid[r][c]=Math.floor(Math.random()*200+30);}
+  kernel=[]; for(let r=0;r<K;r++){kernel[r]=[];for(let c=0;c<K;c++) kernel[r][c]=parseFloat((Math.random()*2-1).toFixed(2));}
+  outputGrid=[]; for(let r=0;r<outN;r++){outputGrid[r]=[];for(let c=0;c<outN;c++) outputGrid[r][c]=null;}
+  curRow=0;curCol=0;
+}
+
+function getPixel(r,c){const rr=r-pad,cc2=c-pad;if(rr<0||rr>=N||cc2<0||cc2>=N)return 0;return inputGrid[rr][cc2];}
+
+function drawGrids(){
+  cx.clearRect(0,0,cc.width,cc.height);
+  const cellMax=Math.min(Math.floor(380/N),42);
+  const cell=Math.max(18,cellMax);
+  const startX=20, startY=55;
+  const inTop=curRow*S-pad, inLeft=curCol*S-pad;
+
+  cx.fillStyle='#7ecfff'; cx.font='bold 14px Segoe UI'; cx.textAlign='left';
+  cx.fillText(`输入: ${N}×${N}  (像素值)`,startX,20);
+  cx.fillStyle='#666'; cx.font='11px Segoe UI';
+  cx.fillText(`padding=${pad} (边缘补0)`,startX,36);
+
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const x=startX+c*cell, y=startY+r*cell;
+      const isK=isRunning && r>=inTop && r<inTop+K && c>=inLeft && c<inLeft+K;
+      const v=inputGrid[r][c];
+      if(isK){cx.fillStyle='rgba(81,207,102,0.6)';}
+      else{const g=Math.floor(v*0.7+40);cx.fillStyle=`rgb(${g+30},${g+20},${g})`;}
+      cx.fillRect(x,y,cell-1,cell-1);
+      // visible border
+      cx.strokeStyle='#334455'; cx.lineWidth=1; cx.strokeRect(x,y,cell-1,cell-1);
+      if(cell>=22){cx.fillStyle=isK?'#fff':'#ccc';cx.font=`${Math.min(11,cell-8)}px Segoe UI`;cx.textAlign='center';cx.fillText(v,x+cell/2,y+cell/2+4);}
+    }
+  }
+  if(isRunning){cx.strokeStyle='#4a9eff';cx.lineWidth=3;cx.strokeRect(startX+(curCol*S-pad)*cell-2,startY+(curRow*S-pad)*cell-2,K*cell+3,K*cell+3);}
+
+  // Kernel
+  const kernelX=startX+N*cell+35;
+  cx.fillStyle='#ffa94d';cx.font='bold 14px Segoe UI';cx.textAlign='left';
+  cx.fillText(`卷积核: ${K}×${K}`,kernelX,20);
+  cx.fillStyle='#666';cx.font='11px Segoe UI';cx.fillText('(训练学到的权重)',kernelX,36);
+  const kcell=Math.max(38,Math.min(50,cell));
+  for(let r=0;r<K;r++){for(let c=0;c<K;c++){
+    const x=kernelX+c*kcell,y=startY+r*kcell,v=kernel[r][c];
+    cx.fillStyle=v>=0?`rgba(74,158,255,${Math.abs(v)*0.4+0.2})`:`rgba(255,107,107,${Math.abs(v)*0.4+0.2})`;
+    cx.fillRect(x,y,kcell-1,kcell-1);
+    cx.strokeStyle='#445566';cx.lineWidth=1;cx.strokeRect(x,y,kcell-1,kcell-1);
+    cx.fillStyle='#fff';cx.font='bold 12px Segoe UI';cx.textAlign='center';cx.fillText(v.toFixed(2),x+kcell/2,y+kcell/2+4);
+  }}
+  if(isRunning){
+    let total=0;
+    for(let kr=0;kr<K;kr++)for(let kc=0;kc<K;kc++) total+=getPixel(curRow*S-pad+kr+pad,curCol*S-pad+kc+pad)*kernel[kr][kc];
+    const silu=total*(1/(1+Math.exp(-total)));
+    cx.fillStyle='#ffa94d';cx.font='12px Segoe UI';cx.textAlign='left';
+    cx.fillText(`Σ(像素×权重) = ${total.toFixed(1)}`,kernelX,startY+K*kcell+20);
+    cx.fillStyle='#51cf66';cx.fillText(`SiLU → ${silu.toFixed(1)}`,kernelX,startY+K*kcell+38);
+  }
+
+  // Output
+  const outX=kernelX+K*kcell+80;
+  cx.fillStyle='#ff6b9d';cx.font='bold 14px Segoe UI';cx.textAlign='left';
+  cx.fillText(`输出: ${outN}×${outN}  ${S===2?'(缩小一半！)':'(不变)'}`,outX,20);
+  cx.fillStyle='#666';cx.font='11px Segoe UI';
+  cx.fillText(`= (${N}−3+2)/${S}+1 = ${outN}`,outX,36);
+  const ocell=Math.max(22,Math.min(55,cell*N/outN*0.7));
+  for(let r=0;r<outN;r++){for(let c=0;c<outN;c++){
+    const x=outX+c*ocell,y=startY+r*ocell,v=outputGrid[r][c];
+    const isCur=isRunning&&r===curRow&&c===curCol;
+    if(v!==null){const nv=Math.max(30,Math.min(230,Math.abs(v)%200+40));cx.fillStyle=isCur?'#ff4444':`rgb(${nv},${Math.floor(nv*0.6)},${Math.floor(nv*0.4)})`;
+    }else{cx.fillStyle='#151525';}
+    cx.fillRect(x,y,ocell-1,ocell-1);
+    cx.strokeStyle=isCur?'#ff4444':'#334455';cx.lineWidth=isCur?2:1;cx.strokeRect(x,y,ocell-1,ocell-1);
+    if(v!==null&&ocell>=28){cx.fillStyle='#fff';cx.font=`${Math.min(10,ocell-10)}px Segoe UI`;cx.textAlign='center';cx.fillText(Math.round(v),x+ocell/2,y+ocell/2+3);}
+  }}
+
+  const by=startY+Math.max(N*cell,outN*ocell)+15;
+  cx.fillStyle='#7ecfff';cx.font='bold 13px Segoe UI';cx.textAlign='left';
+  cx.fillText(`stride=${S}：卷积核每次移动 ${S} 格 → 输出 ${outN}×${outN}`,20,by);
+  if(isRunning){cx.fillStyle='#ffa94d';cx.font='12px Segoe UI';cx.textAlign='right';
+    cx.fillText(`位置[${curRow},${curCol}] | 进度 ${((curRow*outN+curCol+1)/(outN*outN)*100).toFixed(0)}%`,cc.width-20,by);}
+}
+
+function stepAnim(){
+  let total=0;
+  for(let kr=0;kr<K;kr++)for(let kc=0;kc<K;kc++) total+=getPixel(curRow*S-pad+kr+pad,curCol*S-pad+kc+pad)*kernel[kr][kc];
+  outputGrid[curRow][curCol]=total*(1/(1+Math.exp(-total)));
+  drawGrids();
+  curCol++;if(curCol>=outN){curCol=0;curRow++;}
+  if(curRow>=outN){isRunning=false;clearInterval(animTimer);
+    document.getElementById('convExplain').innerHTML=`<h3>✅ 完成！${N}×${N} → ${outN}×${outN}</h3><p>stride=${S} 使输出${S===2?'缩小一半':'不变'}。YOLO11 连做5次：640→320→160→80→40→20</p><p>每次还有 <span class="hl2">多个卷积核并行</span>（16/32/64/128/256个），每个产生一个特征图通道</p>`;}
+}
+
+function startAnim(){if(animTimer)clearInterval(animTimer);initGrids();isRunning=true;drawGrids();animTimer=setInterval(stepAnim,parseInt(document.getElementById('speed').value));}
+function resetAnim(){if(animTimer)clearInterval(animTimer);isRunning=false;initGrids();drawGrids();}
+initGrids();drawGrids();
+
+// ==================== TAB 2: Architecture Diagrams ====================
+const ac=document.getElementById('archCanvas'), ax=ac.getContext('2d');
+let currentLayer=0;
+
+function showLayer(idx){
+  currentLayer=idx;
+  document.querySelectorAll('.arch-nav button').forEach((b,i)=>b.classList.toggle('active',i===idx));
+  drawLayer(idx);
+}
+
+function drawTensor3D(x,y,w,h,d,color,label,sizeLabel){
+  const off=Math.min(d*3,40);
+  // back face
+  ax.fillStyle=color+'44';
+  ax.beginPath();ax.moveTo(x+off,y-off);ax.lineTo(x+w+off,y-off);ax.lineTo(x+w+off,y+h-off);ax.lineTo(x+off,y+h-off);ax.closePath();ax.fill();
+  ax.strokeStyle=color+'88';ax.lineWidth=1;ax.stroke();
+  // top face
+  ax.fillStyle=color+'33';
+  ax.beginPath();ax.moveTo(x,y);ax.lineTo(x+off,y-off);ax.lineTo(x+w+off,y-off);ax.lineTo(x+w,y);ax.closePath();ax.fill();
+  ax.strokeStyle=color+'88';ax.stroke();
+  // right face
+  ax.fillStyle=color+'55';
+  ax.beginPath();ax.moveTo(x+w,y);ax.lineTo(x+w+off,y-off);ax.lineTo(x+w+off,y+h-off);ax.lineTo(x+w,y+h);ax.closePath();ax.fill();
+  ax.strokeStyle=color+'88';ax.stroke();
+  // front face
+  ax.fillStyle=color+'66';
+  ax.fillRect(x,y,w,h);
+  ax.strokeStyle=color;ax.lineWidth=1.5;ax.strokeRect(x,y,w,h);
+  // labels
+  if(label){ax.fillStyle='#fff';ax.font='bold 12px Segoe UI';ax.textAlign='center';ax.fillText(label,x+w/2,y+h/2+4);}
+  if(sizeLabel){ax.fillStyle='#bbb';ax.font='11px Segoe UI';ax.textAlign='center';ax.fillText(sizeLabel,x+w/2,y+h+15);}
+}
+
+function drawKernelGrid(x,y,size,values,color){
+  const c=size;
+  for(let r=0;r<3;r++){for(let co=0;co<3;co++){
+    const v=values?values[r*3+co]:(Math.random()*2-1);
+    ax.fillStyle=v>=0?`rgba(74,158,255,${Math.abs(v)*0.4+0.2})`:`rgba(255,107,107,${Math.abs(v)*0.4+0.2})`;
+    ax.fillRect(x+co*c,y+r*c,c-1,c-1);
+    ax.strokeStyle='#445566';ax.lineWidth=0.5;ax.strokeRect(x+co*c,y+r*c,c-1,c-1);
+  }}
+}
+
+function drawArrowH(x1,y1,x2,y2,color,label){
+  ax.beginPath();ax.moveTo(x1,y1);ax.lineTo(x2,y2);ax.strokeStyle=color||'#3a5a7a';ax.lineWidth=2;ax.stroke();
+  const a=Math.atan2(y2-y1,x2-x1),s=8;
+  ax.beginPath();ax.moveTo(x2,y2);ax.lineTo(x2-s*Math.cos(a-0.4),y2-s*Math.sin(a-0.4));ax.lineTo(x2-s*Math.cos(a+0.4),y2-s*Math.sin(a+0.4));ax.closePath();ax.fillStyle=color||'#3a5a7a';ax.fill();
+  if(label){ax.fillStyle='#aaa';ax.font='11px Segoe UI';ax.textAlign='center';ax.fillText(label,(x1+x2)/2,(y1+y2)/2-8);}
+}
+
+function drawLayer(idx){
+  ax.clearRect(0,0,ac.width,ac.height);
+  const el=document.getElementById('archExplain');
+
+  if(idx===0){ // Layer 0: Conv 640→320
+    ax.fillStyle='#7ecfff';ax.font='bold 16px Segoe UI';ax.textAlign='left';
+    ax.fillText('层0：Conv [64, 3, 2] — 640×640×3 → 320×320×16',15,25);
+    ax.fillStyle='#888';ax.font='12px Segoe UI';
+    ax.fillText('3×3卷积，stride=2，padding=1 | 16个卷积核（YOLO11n: 64×0.25=16）',15,42);
+
+    // Input: 3 channel planes
+    ax.fillStyle='#fff';ax.font='bold 13px Segoe UI';ax.textAlign='center';
+    ax.fillText('输入图片',90,62);
+    const colors=['#ff4444','#44cc44','#4488ff'];
+    const labels=['R','G','B'];
+    for(let i=2;i>=0;i--){
+      drawTensor3D(20+i*18, 80+i*12, 140, 140, 1, colors[i], labels[i]+' 通道', i===0?'640×640×3':'');
+    }
+
+    // Arrow
+    drawArrowH(230,170,290,170,'#ffa94d','Conv 3×3, s=2');
+
+    // 16 kernels
+    ax.fillStyle='#ffa94d';ax.font='bold 13px Segoe UI';ax.textAlign='center';
+    ax.fillText('16 个卷积核（每个 3×3×3）',470,62);
+    ax.fillStyle='#888';ax.font='11px Segoe UI';
+    ax.fillText('每个卷积核有 3层(RGB) × 3×3 = 27个权重',470,78);
+
+    for(let k=0;k<16;k++){
+      const col=k%8, row=Math.floor(k/8);
+      const kx=300+col*44, ky=92+row*80;
+      // 3 stacked small kernels for 3 channels
+      for(let ch=2;ch>=0;ch--){
+        const ox=kx+ch*4, oy=ky-ch*4;
+        drawKernelGrid(ox,oy,12,null,colors[ch]);
+      }
+      ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.textAlign='center';
+      ax.fillText(`#${k}`,kx+18,ky+42);
+    }
+
+    // Arrow
+    drawArrowH(660,170,720,170,'#ffa94d','stride=2');
+
+    // Output: 16 channel feature maps
+    ax.fillStyle='#ff6b9d';ax.font='bold 13px Segoe UI';ax.textAlign='center';
+    ax.fillText('输出：16个特征图',920,62);
+
+    for(let i=15;i>=0;i--){
+      const hue=(i/16*200+180)%360;
+      const ox=740+i*8, oy=80+i*5;
+      ax.fillStyle=`hsla(${hue},60%,50%,0.3)`;
+      ax.fillRect(ox,oy,120,120);
+      ax.strokeStyle=`hsla(${hue},60%,50%,0.7)`;ax.lineWidth=1;ax.strokeRect(ox,oy,120,120);
+    }
+    ax.fillStyle='#bbb';ax.font='11px Segoe UI';ax.textAlign='center';
+    ax.fillText('320×320×16',860,280);
+    ax.fillStyle='#ff6b9d';ax.font='11px Segoe UI';
+    ax.fillText('每个特征图 = 一个卷积核扫描全图的结果',860,298);
+
+    // Bottom: CBS internal
+    const by=320;
+    ax.fillStyle='#7ecfff';ax.font='bold 14px Segoe UI';ax.textAlign='left';
+    ax.fillText('这个 Conv 内部其实是 CBS (Conv + BatchNorm + SiLU)，共 3 层操作：',15,by);
+
+    // Draw CBS pipeline
+    const stages=[
+      {label:'Conv 卷积',sub:'3×3, stride=2\n16个卷积核\n27个权重/核',color:'#4a9eff',w:160},
+      {label:'BatchNorm',sub:'批归一化\n标准化输出\n防止数值爆炸',color:'#51cf66',w:150},
+      {label:'SiLU 激活',sub:'x × sigmoid(x)\n非线性判定\n=一个神经元的决策',color:'#ffa94d',w:160},
+    ];
+    let sx=80;
+    for(let i=0;i<stages.length;i++){
+      const s=stages[i];
+      ax.fillStyle=s.color+'22';
+      ax.fillRect(sx,by+20,s.w,100);
+      ax.strokeStyle=s.color;ax.lineWidth=2;ax.strokeRect(sx,by+20,s.w,100);
+      ax.fillStyle='#fff';ax.font='bold 13px Segoe UI';ax.textAlign='center';
+      ax.fillText(s.label,sx+s.w/2,by+42);
+      ax.fillStyle='#bbb';ax.font='11px Segoe UI';
+      const lines=s.sub.split('\n');
+      lines.forEach((l,j)=>ax.fillText(l,sx+s.w/2,by+58+j*15));
+      if(i<2) drawArrowH(sx+s.w+5,by+70,sx+s.w+35,by+70,s.color);
+      sx+=s.w+40;
+    }
+
+    ax.fillStyle='#ff6b6b';ax.font='bold 13px Segoe UI';ax.textAlign='left';
+    ax.fillText('→ 所以每个 "Conv" 块实际上包含 3 层操作，不是 1 层！',sx+20,by+70);
+
+    // Formula
+    ax.fillStyle='#888';ax.font='12px Segoe UI';ax.textAlign='left';
+    ax.fillText('参数量 = 16个卷积核 × (3通道 × 3×3权重 + 1偏置) = 16 × 28 = 448 个权重',15,by+145);
+
+    el.innerHTML='<h3>层0 详解</h3><p>输入 RGB 图片有 <span class="hl3">3 个通道</span>（红、绿、蓝），每个通道是一张 640×640 的灰度图。</p><p><span class="hl">16 个卷积核</span>同时工作，每个卷积核大小 3×3×3（看3个通道的3×3区域），stride=2 所以输出缩小一半。</p><p>每个卷积核产生一个 320×320 的特征图，16个卷积核 → 输出 320×320×<span class="hl2">16</span>。</p>';
+  }
+  else if(idx===1){ // Layer 1
+    ax.fillStyle='#7ecfff';ax.font='bold 16px Segoe UI';ax.textAlign='left';
+    ax.fillText('层1：Conv [128, 3, 2] — 320×320×16 → 160×160×32',15,25);
+    ax.fillStyle='#888';ax.font='12px Segoe UI';
+    ax.fillText('3×3卷积，stride=2 | 32个卷积核（YOLO11n: 128×0.25=32），每个卷积核 3×3×16',15,42);
+
+    // Input
+    ax.fillStyle='#fff';ax.font='bold 12px Segoe UI';ax.textAlign='center';
+    ax.fillText('输入: 320×320×16',100,62);
+    for(let i=15;i>=0;i--){
+      const hue=(i/16*200+180)%360;
+      drawTensor3D(20+i*5,80+i*3,120,120,1,`hsl(${hue},60%,40%)`,'','');
+    }
+    ax.fillStyle='#bbb';ax.font='11px Segoe UI';ax.fillText('16个通道',100,230);
+
+    drawArrowH(220,160,300,160,'#ffa94d','Conv 3×3×16\nstride=2');
+
+    // 32 kernels (each 3×3×16)
+    ax.fillStyle='#ffa94d';ax.font='bold 12px Segoe UI';ax.textAlign='center';
+    ax.fillText('32个卷积核 (每个3×3×16)',460,62);
+    for(let k=0;k<32;k++){
+      const col=k%8,row=Math.floor(k/8);
+      const kx=310+col*40,ky=78+row*55;
+      // stack of 16
+      for(let ch=3;ch>=0;ch--){
+        const ox=kx+ch*2,oy=ky-ch*2;
+        drawKernelGrid(ox,oy,9,null,'#ffa94d');
+      }
+      ax.fillStyle='#777';ax.font='9px Segoe UI';ax.textAlign='center';
+      ax.fillText(`#${k}`,kx+14,ky+33);
+    }
+
+    drawArrowH(640,160,700,160,'#ffa94d');
+
+    // Output
+    ax.fillStyle='#ff6b9d';ax.font='bold 12px Segoe UI';ax.textAlign='center';
+    ax.fillText('输出: 160×160×32',850,62);
+    for(let i=31;i>=0;i--){
+      const hue=(i/32*300)%360;
+      const ox=720+i*4,oy=80+i*2.5;
+      ax.fillStyle=`hsla(${hue},55%,45%,0.25)`;ax.fillRect(ox,oy,100,100);
+      ax.strokeStyle=`hsla(${hue},55%,45%,0.6)`;ax.lineWidth=0.5;ax.strokeRect(ox,oy,100,100);
+    }
+    ax.fillStyle='#bbb';ax.font='11px Segoe UI';ax.fillText('32个特征图通道',850,230);
+
+    // Key insight
+    ax.fillStyle='#ff6b6b';ax.font='bold 14px Segoe UI';ax.textAlign='left';
+    ax.fillText('关键理解：',15,280);
+    ax.fillStyle='#e0e0e0';ax.font='13px Segoe UI';
+    ax.fillText('• 每个卷积核现在是 3×3×16（不是3×3×3了！），因为输入有16个通道',15,300);
+    ax.fillText('• 一个卷积核参数 = 3×3×16 + 1(bias) = 145个权重',15,320);
+    ax.fillText('• 32个卷积核总参数 = 32 × 145 = 4,640个权重',15,340);
+    ax.fillText('• 尺寸：320÷2=160（stride=2缩小一半）  通道：16→32（卷积核数量翻倍）',15,360);
+
+    ax.fillStyle='#ffa94d';ax.font='bold 13px Segoe UI';
+    ax.fillText('规律：越深的层，空间越小但通道越多 = "图片越来越小，但信息越来越浓缩"',15,395);
+
+    el.innerHTML='<h3>层1 详解</h3><p>输入16通道 → 32个卷积核（每个看全部16通道的3×3区域）→ 输出32通道</p><p><span class="hl">通道数翻倍（16→32），空间缩半（320→160）</span>。这是CNN的核心模式。</p>';
+  }
+  else if(idx===2){ // C3k2
+    ax.fillStyle='#7ecfff';ax.font='bold 16px Segoe UI';ax.textAlign='left';
+    ax.fillText('层2：C3k2 [256, False, 0.25] — C3k2 块内部结构',15,25);
+    ax.fillStyle='#888';ax.font='12px Segoe UI';
+    ax.fillText('CSP (Cross Stage Partial) 结构：一半数据深处理，一半走捷径。YOLO11n 输出64通道',15,42);
+
+    const bx=30, by=70, bw=1320, bh=380;
+    ax.fillStyle='#ff6b6b11';ax.fillRect(bx,by,bw,bh);
+    ax.strokeStyle='#ff6b6b66';ax.lineWidth=2;ax.strokeRect(bx,by,bw,bh);
+    ax.fillStyle='#ff6b6b';ax.font='bold 14px Segoe UI';ax.textAlign='left';
+    ax.fillText('C3k2 块内部',bx+10,by+20);
+
+    // Input
+    drawTensor3D(50,120,60,80,10,'#4a9eff','','输入\n160×160×32');
+
+    // Split
+    drawArrowH(130,160,180,120,'#aaa','上半(16ch)');
+    drawArrowH(130,160,180,240,'#aaa','下半(16ch)');
+
+    // Upper path: bottleneck
+    drawTensor3D(190,90,40,50,5,'#4a9eff','16ch','');
+
+    drawArrowH(245,115,275,115,'#ffa94d','');
+
+    // Bottleneck detail
+    ax.fillStyle='#ffa94d22';ax.fillRect(280,80,400,80);
+    ax.strokeStyle='#ffa94d88';ax.lineWidth=1.5;ax.strokeRect(280,80,400,80);
+    ax.fillStyle='#ffa94d';ax.font='bold 12px Segoe UI';ax.textAlign='left';
+    ax.fillText('Bottleneck (瓶颈层)',290,98);
+
+    // Conv 1x1
+    ax.fillStyle='#4a9eff33';ax.fillRect(295,105,90,45);ax.strokeStyle='#4a9eff';ax.strokeRect(295,105,90,45);
+    ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';
+    ax.fillText('Conv 1×1',340,122);ax.fillStyle='#aaa';ax.font='10px Segoe UI';
+    ax.fillText('降维压缩',340,138);
+
+    drawArrowH(390,127,410,127,'#aaa');
+
+    // Conv 3x3
+    ax.fillStyle='#4a9eff33';ax.fillRect(415,105,90,45);ax.strokeStyle='#4a9eff';ax.strokeRect(415,105,90,45);
+    ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';
+    ax.fillText('Conv 3×3',460,122);ax.fillStyle='#aaa';ax.font='10px Segoe UI';
+    ax.fillText('特征提取',460,138);
+
+    drawArrowH(510,127,530,127,'#aaa');
+
+    // Each conv is CBS
+    ax.fillStyle='#888';ax.font='10px Segoe UI';ax.textAlign='left';
+    ax.fillText('(每个Conv = CBS = Conv+BN+SiLU = 3层)',540,127);
+
+    // Bottleneck output
+    drawArrowH(685,127,720,160,'#ffa94d');
+
+    // Lower path: shortcut
+    drawTensor3D(190,220,40,50,5,'#51cf66','16ch','');
+    ax.fillStyle='#51cf66';ax.font='bold 12px Segoe UI';ax.textAlign='center';
+    ax.fillText('直接传递（捷径）',350,260);
+    ax.fillText('不做任何处理',350,278);
+    drawArrowH(245,245,720,200,'#51cf66');
+
+    // Concat
+    ax.fillStyle='#fab00533';ax.fillRect(730,140,90,60);ax.strokeStyle='#fab005';ax.lineWidth=2;ax.strokeRect(730,140,90,60);
+    ax.fillStyle='#fff';ax.font='bold 12px Segoe UI';ax.textAlign='center';
+    ax.fillText('Concat',775,163);ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.fillText('拼接合并',775,180);
+
+    drawArrowH(825,170,860,170,'#ffa94d');
+
+    // Final Conv
+    ax.fillStyle='#4a9eff33';ax.fillRect(870,140,100,60);ax.strokeStyle='#4a9eff';ax.lineWidth=1.5;ax.strokeRect(870,140,100,60);
+    ax.fillStyle='#fff';ax.font='bold 12px Segoe UI';ax.textAlign='center';
+    ax.fillText('Conv 1×1',920,163);ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.fillText('调整通道数',920,180);
+
+    drawArrowH(975,170,1020,170,'#ffa94d');
+
+    // Output
+    drawTensor3D(1030,120,70,90,15,'#ff6b9d','','输出\n160×160×64');
+
+    // Layer count
+    ax.fillStyle='#ff6b6b';ax.font='bold 14px Segoe UI';ax.textAlign='left';
+    ax.fillText('C3k2 内部总共有 ~5 个卷积操作（每个都是 CBS=3层）:',50,340);
+    ax.fillStyle='#e0e0e0';ax.font='13px Segoe UI';
+    const items=['① 分割前的 Conv 1×1 (通道分割)','② Bottleneck 内的 Conv 1×1 (降维)','③ Bottleneck 内的 Conv 3×3 (特征提取)','④ 拼接后的 Conv 1×1 (通道调整)','→ 实际约 5×3 = ~15 层基础操作'];
+    items.forEach((t,i)=>{ax.fillText(t,70,365+i*20);});
+
+    el.innerHTML='<h3>C3k2 块详解</h3><p>这就是论文说的 CSP 结构：<span class="hl3">一半数据深度处理，一半走捷径</span></p><p>好处：计算量减半，但深度分支仍能提取复杂特征，捷径分支保留原始信息不丢失。</p>';
+  }
+  else if(idx===3){ // Conv 160→80
+    ax.fillStyle='#7ecfff';ax.font='bold 16px Segoe UI';ax.textAlign='left';
+    ax.fillText('层3：Conv [256, 3, 2] — 160×160×64 → 80×80×64',15,25);
+    ax.fillStyle='#888';ax.font='12px Segoe UI';
+    ax.fillText('又一次 stride=2 缩小一半。YOLO11n: 256×0.25=64个卷积核。这就是 P3 特征图的起点！',15,42);
+
+    drawTensor3D(40,80,130,130,20,'#4a9eff','','输入 160×160×64');
+    drawArrowH(210,160,310,160,'#ffa94d','Conv 3×3×64\nstride=2\n64个卷积核');
+
+    // 64 kernels represented
+    ax.fillStyle='#ffa94d';ax.font='bold 12px Segoe UI';ax.textAlign='center';
+    ax.fillText('64个卷积核',520,72);
+    ax.fillStyle='#888';ax.font='11px Segoe UI';
+    ax.fillText('每个 3×3×64 = 576个权重',520,88);
+    for(let k=0;k<64;k++){
+      const col=k%16,row=Math.floor(k/16);
+      const kx=330+col*24,ky=100+row*30;
+      ax.fillStyle=`hsla(${k*5},60%,50%,0.4)`;ax.fillRect(kx,ky,20,22);
+      ax.strokeStyle=`hsla(${k*5},60%,50%,0.7)`;ax.lineWidth=0.5;ax.strokeRect(kx,ky,20,22);
+    }
+    ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.textAlign='center';
+    ax.fillText('(每个小方块 = 一个 3×3×64 的卷积核)',520,232);
+
+    drawArrowH(720,160,790,160,'#ffa94d');
+
+    drawTensor3D(800,90,100,100,20,'#ff6b9d','','输出 80×80×64');
+    ax.fillStyle='#ff6b9d';ax.font='bold 14px Segoe UI';ax.textAlign='center';
+    ax.fillText('★ P3 特征图',870,230);
+    ax.fillStyle='#aaa';ax.font='12px Segoe UI';
+    ax.fillText('stride=8（原图缩小了8倍）',870,248);
+    ax.fillText('用于检测小目标',870,266);
+
+    // Summary so far
+    ax.fillStyle='#7ecfff';ax.font='bold 14px Segoe UI';ax.textAlign='left';
+    ax.fillText('到目前为止的数据流：',15,320);
+    const flow=[
+      {size:'640×640×3',ch:3,label:'RGB图片',color:'#4a9eff'},
+      {size:'320×320×16',ch:16,label:'层0 Conv s=2',color:'#4a9eff'},
+      {size:'160×160×32',ch:32,label:'层1 Conv s=2',color:'#4a9eff'},
+      {size:'160×160×64',ch:64,label:'层2 C3k2',color:'#ff6b6b'},
+      {size:'80×80×64',ch:64,label:'层3 Conv s=2 ★P3',color:'#ff6b9d'},
+    ];
+    let fx=30;
+    flow.forEach((f,i)=>{
+      const fw=Math.max(80,f.ch*1.5+50);
+      ax.fillStyle=f.color+'33';ax.fillRect(fx,340,fw,60);
+      ax.strokeStyle=f.color;ax.lineWidth=1.5;ax.strokeRect(fx,340,fw,60);
+      ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';
+      ax.fillText(f.size,fx+fw/2,340+20);
+      ax.fillStyle='#aaa';ax.font='10px Segoe UI';
+      ax.fillText(f.label,fx+fw/2,340+38);
+      ax.fillText(`${f.ch}ch`,fx+fw/2,340+52);
+      if(i<flow.length-1) drawArrowH(fx+fw+3,370,fx+fw+18,370,'#555');
+      fx+=fw+22;
+    });
+
+    ax.fillStyle='#ffa94d';ax.font='bold 13px Segoe UI';ax.textAlign='left';
+    ax.fillText('规律：空间不断缩小(÷2)，通道不断增加(×2) → 信息从"大而稀疏"变成"小而浓缩"',15,430);
+
+    el.innerHTML='<h3>层3 + 数据流总结</h3><p>到 P3 时，640→80，缩小了 8 倍，但通道从 3 增加到 64，信息被压缩和浓缩。</p>';
+  }
+  else if(idx===4){ // Layers 4-6
+    ax.fillStyle='#7ecfff';ax.font='bold 16px Segoe UI';ax.textAlign='left';
+    ax.fillText('层4-6：继续缩小到 40×40（P4）',15,25);
+
+    const layers=[
+      {id:4,type:'C3k2',in:'80×80×64',out:'80×80×128',ch:128,color:'#ff6b6b',desc:'CSP块，128通道\nc3k=False, 标准瓶颈'},
+      {id:5,type:'Conv',in:'80×80×128',out:'40×40×128',ch:128,color:'#4a9eff',desc:'stride=2 缩小一半\n128个3×3卷积核'},
+      {id:6,type:'C3k2',in:'40×40×128',out:'40×40×128',ch:128,color:'#ff6b6b',desc:'CSP块(深度版)\nc3k=True → 用C3模块\n更深的特征提取'},
+    ];
+    let ly=55;
+    layers.forEach((l,i)=>{
+      const lw=1300;
+      ax.fillStyle=l.color+'11';ax.fillRect(15,ly,lw,120);
+      ax.strokeStyle=l.color+'66';ax.lineWidth=1;ax.strokeRect(15,ly,lw,120);
+      ax.fillStyle=l.color;ax.font='bold 14px Segoe UI';ax.textAlign='left';
+      ax.fillText(`层${l.id}: ${l.type}`,25,ly+20);
+
+      drawTensor3D(25,ly+35,50,60,Math.min(l.ch/8,15),l.color,'',l.in);
+      drawArrowH(110,ly+65,180,ly+65,l.color,l.type);
+      drawTensor3D(200,ly+35,50,60,Math.min(l.ch/8,15),'#ff6b9d','',l.out);
+
+      // Kernels or structure
+      if(l.type==='Conv'){
+        ax.fillStyle='#ffa94d';ax.font='12px Segoe UI';ax.textAlign='left';
+        ax.fillText(`${l.ch}个卷积核 (每个3×3×${l.id===5?128:64})`,290,ly+40);
+        for(let k=0;k<Math.min(l.ch,32);k++){
+          const kx=290+k*12,ky=ly+50;
+          ax.fillStyle=`hsla(${k*10},55%,50%,0.4)`;ax.fillRect(kx,ky,10,10);
+          ax.strokeStyle=`hsla(${k*10},55%,50%,0.6)`;ax.lineWidth=0.3;ax.strokeRect(kx,ky,10,10);
+        }
+        if(l.ch>32){ax.fillStyle='#888';ax.font='11px Segoe UI';ax.fillText(`...共${l.ch}个`,290+32*12+5,ly+60);}
+        ax.fillStyle='#888';ax.font='11px Segoe UI';ax.textAlign='left';
+        ax.fillText('内部: CBS (Conv+BN+SiLU) = 3层操作',290,ly+85);
+      } else {
+        ax.fillStyle='#888';ax.font='12px Segoe UI';ax.textAlign='left';
+        const lines=l.desc.split('\n');
+        lines.forEach((t,j)=>ax.fillText(t,290,ly+40+j*16));
+        ax.fillText(`内部: 分割→Bottleneck(Conv1×1+Conv3×3)→拼接→Conv1×1 ≈ 5个CBS ≈ 15层`,290,ly+40+lines.length*16+5);
+      }
+      ly+=130;
+    });
+
+    ax.fillStyle='#ff6b9d';ax.font='bold 14px Segoe UI';ax.textAlign='center';
+    ax.fillText('★ 层5输出 40×40×128 = P4 特征图（stride=16，检测中等目标）',690,ly+10);
+
+    el.innerHTML='<h3>层4-6</h3><p>层4: C3k2增加通道到128 | 层5: Conv stride=2缩小到40×40 <span class="hl3">★P4</span> | 层6: C3k2(深度版)进一步提取特征</p>';
+  }
+  else if(idx===5){ // Layers 7-10
+    ax.fillStyle='#7ecfff';ax.font='bold 16px Segoe UI';ax.textAlign='left';
+    ax.fillText('层7-10：最深处 20×20 + SPPF + C2PSA（YOLO11最核心的创新）',15,25);
+
+    // Layer 7: Conv
+    let ly=50;
+    ax.fillStyle='#4a9eff11';ax.fillRect(15,ly,1350,85);ax.strokeStyle='#4a9eff66';ax.strokeRect(15,ly,1350,85);
+    ax.fillStyle='#4a9eff';ax.font='bold 13px Segoe UI';ax.textAlign='left';
+    ax.fillText('层7: Conv [1024,3,2] → stride=2 缩小到 20×20',25,ly+18);
+    drawTensor3D(25,ly+28,40,40,15,'#4a9eff','','40×40×128');
+    drawArrowH(100,ly+50,150,ly+50,'#ffa94d','256个3×3核');
+    drawTensor3D(160,ly+28,30,30,20,'#ff6b9d','','20×20×256');
+    ax.fillStyle='#aaa';ax.font='11px Segoe UI';ax.fillText('★ P5 特征图 (stride=32, 检测大目标)',250,ly+55);
+
+    // Layer 8: C3k2
+    ly+=95;
+    ax.fillStyle='#ff6b6b11';ax.fillRect(15,ly,1350,65);ax.strokeStyle='#ff6b6b66';ax.strokeRect(15,ly,1350,65);
+    ax.fillStyle='#ff6b6b';ax.font='bold 13px Segoe UI';ax.fillText('层8: C3k2 [1024,True] → 深度CSP块 (c3k=True用C3模块)',25,ly+18);
+    ax.fillStyle='#aaa';ax.font='12px Segoe UI';
+    ax.fillText('20×20×256 → 20×20×256 | 内部约7个CBS操作 ≈ 21层 | 更深的Bottleneck提取高级语义特征',25,ly+42);
+
+    // Layer 9: SPPF
+    ly+=75;
+    ax.fillStyle='#51cf6611';ax.fillRect(15,ly,1350,180);ax.strokeStyle='#51cf6666';ax.lineWidth=2;ax.strokeRect(15,ly,1350,180);
+    ax.fillStyle='#51cf66';ax.font='bold 14px Segoe UI';ax.fillText('层9: SPPF [1024, 5] — 空间金字塔池化（快速版）',25,ly+20);
+
+    // SPPF internal
+    drawTensor3D(30,ly+35,35,35,15,'#4a9eff','','20×20\n×256');
+    drawArrowH(90,ly+55,120,ly+55,'#51cf66','Conv1×1');
+    drawTensor3D(130,ly+35,35,35,10,'#51cf66','','');
+
+    drawArrowH(180,ly+55,215,ly+55,'#51cf66');
+    ax.fillStyle='#51cf6644';ax.fillRect(220,ly+35,80,45);ax.strokeStyle='#51cf66';ax.strokeRect(220,ly+35,80,45);
+    ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';
+    ax.fillText('MaxPool',260,ly+52);ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.fillText('5×5',260,ly+67);
+
+    drawArrowH(305,ly+55,330,ly+55,'#51cf66');
+    ax.fillStyle='#51cf6644';ax.fillRect(335,ly+35,80,45);ax.strokeStyle='#51cf66';ax.strokeRect(335,ly+35,80,45);
+    ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';
+    ax.fillText('MaxPool',375,ly+52);ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.fillText('5×5',375,ly+67);
+
+    drawArrowH(420,ly+55,445,ly+55,'#51cf66');
+    ax.fillStyle='#51cf6644';ax.fillRect(450,ly+35,80,45);ax.strokeStyle='#51cf66';ax.strokeRect(450,ly+35,80,45);
+    ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';
+    ax.fillText('MaxPool',490,ly+52);ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.fillText('5×5',490,ly+67);
+
+    // Concat all
+    drawArrowH(535,ly+55,570,ly+55,'#fab005');
+    ax.fillStyle='#fab00533';ax.fillRect(575,ly+30,80,50);ax.strokeStyle='#fab005';ax.strokeRect(575,ly+30,80,50);
+    ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';ax.fillText('Concat',615,ly+50);ax.fillStyle='#aaa';ax.font='10px Segoe UI';ax.fillText('×4拼接',615,ly+65);
+
+    drawArrowH(660,ly+55,695,ly+55,'#51cf66','Conv1×1');
+    drawTensor3D(740,ly+35,35,35,15,'#ff6b9d','','20×20\n×256');
+
+    ax.fillStyle='#aaa';ax.font='12px Segoe UI';ax.textAlign='left';
+    ax.fillText('3次MaxPool级联：感受野 5×5 → 9×9 → 13×13，同时捕获近/中/远距离信息',30,ly+110);
+    ax.fillText('总共约 5 层操作（2个Conv1×1 + 3个MaxPool）',30,ly+130);
+    ax.fillStyle='#51cf66';ax.font='bold 12px Segoe UI';
+    ax.fillText('效果 = 三个不同倍率望远镜同时观察',30,ly+155);
+
+    // Layer 10: C2PSA
+    ly+=190;
+    ax.fillStyle='#ffa94d11';ax.fillRect(15,ly,1350,160);ax.strokeStyle='#ffa94d66';ax.lineWidth=2;ax.strokeRect(15,ly,1350,160);
+    ax.fillStyle='#ffa94d';ax.font='bold 14px Segoe UI';ax.textAlign='left';
+    ax.fillText('层10: C2PSA [1024] — 注意力机制（YOLOv11 最大创新！YOLOv8没有这个）',25,ly+20);
+
+    drawTensor3D(30,ly+35,35,35,15,'#4a9eff','','20×20\n×256');
+    drawArrowH(85,ly+55,115,ly+55,'#ffa94d');
+
+    ax.fillStyle='#ffa94d22';ax.fillRect(120,ly+30,500,55);ax.strokeStyle='#ffa94d88';ax.strokeRect(120,ly+30,500,55);
+    const psaSteps=['Conv分割','Q,K,V投影','注意力权重','Softmax','加权融合','Conv合并'];
+    psaSteps.forEach((s,i)=>{
+      const sx2=130+i*82;
+      ax.fillStyle='#ffa94d44';ax.fillRect(sx2,ly+38,75,38);ax.strokeStyle='#ffa94d88';ax.strokeRect(sx2,ly+38,75,38);
+      ax.fillStyle='#fff';ax.font='10px Segoe UI';ax.textAlign='center';ax.fillText(s,sx2+37,ly+60);
+    });
+    drawArrowH(625,ly+55,660,ly+55,'#ffa94d');
+    drawTensor3D(670,ly+35,35,35,15,'#ff6b9d','','20×20\n×256');
+
+    ax.fillStyle='#aaa';ax.font='12px Segoe UI';ax.textAlign='left';
+    ax.fillText('C2PSA 内部约 8 层操作：先算"哪里重要"的注意力权重图，再用权重图放大重要区域、弱化不重要区域',30,ly+105);
+    ax.fillStyle='#ffa94d';ax.font='bold 12px Segoe UI';
+    ax.fillText('这就是为什么 YOLOv11 比 YOLOv8 更准确：注意力让网络"看重点"而不是平均看',30,ly+130);
+
+    el.innerHTML='<h3>层7-10: 网络最深处</h3><p>SPPF 提供多尺度感知，C2PSA 提供注意力聚焦。这两个组件让 20×20 的最深层特征包含了最丰富的高级语义信息。</p>';
+  }
+  else if(idx===6){ // Full overview
+    ax.fillStyle='#7ecfff';ax.font='bold 16px Segoe UI';ax.textAlign='left';
+    ax.fillText('完整架构总览：Backbone → Neck → Head',15,25);
+
+    const sections=[
+      {name:'Backbone',color:'#4a9eff',y:45,h:200,items:[
+        {label:'Conv s=2',size:'640→320×16',x:20},
+        {label:'Conv s=2',size:'320→160×32',x:140},
+        {label:'C3k2',size:'160×160×64',x:260},
+        {label:'Conv s=2',size:'160→80×64',x:380},
+        {label:'C3k2',size:'80×80×128',x:500},
+        {label:'Conv s=2',size:'80→40×128',x:620},
+        {label:'C3k2',size:'40×40×128',x:740},
+        {label:'Conv s=2',size:'40→20×256',x:860},
+        {label:'C3k2',size:'20×20×256',x:980},
+        {label:'SPPF',size:'20×20×256',x:1100},
+        {label:'C2PSA',size:'20×20×256',x:1220},
+      ]},
+      {name:'Neck (FPN上采样 + PAN下采样)',color:'#20c997',y:260,h:140,items:[
+        {label:'Upsample',size:'20→40',x:20},
+        {label:'Concat+C3k2',size:'40×40×128',x:150},
+        {label:'Upsample',size:'40→80',x:340},
+        {label:'Concat+C3k2',size:'80×80×64',x:470},
+        {label:'Conv s=2↓',size:'80→40',x:660},
+        {label:'Concat+C3k2',size:'40×40×128',x:790},
+        {label:'Conv s=2↓',size:'40→20',x:980},
+        {label:'Concat+C3k2',size:'20×20×256',x:1110},
+      ]},
+      {name:'Head (Detect)',color:'#cc5de8',y:415,h:120,items:[
+        {label:'P3/8 小目标',size:'80×80×64',x:120},
+        {label:'P4/16 中目标',size:'40×40×128',x:500},
+        {label:'P5/32 大目标',size:'20×20×256',x:880},
+      ]},
+    ];
+
+    sections.forEach(sec=>{
+      ax.fillStyle=sec.color+'0a';ax.fillRect(10,sec.y,1360,sec.h);
+      ax.strokeStyle=sec.color+'44';ax.lineWidth=1;ax.strokeRect(10,sec.y,1360,sec.h);
+      ax.fillStyle=sec.color;ax.font='bold 13px Segoe UI';ax.textAlign='left';
+      ax.fillText(sec.name,15,sec.y+16);
+
+      sec.items.forEach((item,i)=>{
+        const iw=item.label.length>12?120:100;
+        const iy=sec.y+30;
+        const tc=item.label.includes('C3k2')?'#ff6b6b':item.label.includes('SPPF')?'#51cf66':item.label.includes('C2PSA')?'#ffa94d':item.label.includes('Concat')?'#fab005':item.label.includes('Upsample')?'#20c997':item.label.includes('P3')||item.label.includes('P4')||item.label.includes('P5')?'#cc5de8':'#4a9eff';
+        ax.fillStyle=tc+'33';ax.fillRect(item.x,iy,iw,sec.name==='Head'?70:sec.h-50);
+        ax.strokeStyle=tc;ax.lineWidth=1;ax.strokeRect(item.x,iy,iw,sec.name==='Head'?70:sec.h-50);
+        ax.fillStyle='#fff';ax.font='bold 11px Segoe UI';ax.textAlign='center';
+        ax.fillText(item.label,item.x+iw/2,iy+18);
+        ax.fillStyle='#aaa';ax.font='10px Segoe UI';
+        ax.fillText(item.size,item.x+iw/2,iy+34);
+        if(i<sec.items.length-1&&sec.items[i+1]){
+          const nx=sec.items[i+1].x;
+          if(nx>item.x+iw+5) drawArrowH(item.x+iw+2,iy+(sec.name==='Head'?35:Math.floor((sec.h-50)/2)),nx-2,iy+(sec.name==='Head'?35:Math.floor((sec.h-50)/2)),'#555');
+        }
+      });
+    });
+
+    // Arrows between sections
+    drawArrowH(690,245,690,260,'#aaa','');
+    drawArrowH(690,400,690,415,'#aaa','');
+
+    // CPU post-processing
+    ax.fillStyle='#ff6b9d11';ax.fillRect(10,545,1360,60);ax.strokeStyle='#ff6b9d44';ax.strokeRect(10,545,1360,60);
+    ax.fillStyle='#ff6b9d';ax.font='bold 13px Segoe UI';ax.textAlign='left';
+    ax.fillText('CPU 后处理：反量化 → sigmoid → DFL+softmax → 坐标计算 → NMS去重 → 坐标逆变换 → 最终检测结果',20,575);
+
+    // Stats
+    ax.fillStyle='#ffa94d';ax.font='bold 14px Segoe UI';ax.textAlign='center';
+    ax.fillText('YOLO11n: 181层 | 2,624,080个参数 | 6.6 GFLOPs | Backbone 11个模块 + Neck 8个模块 + Head 1个Detect',690,630);
+
+    el.innerHTML='<h3>完整架构总览</h3><p>从左到右看 Backbone 数据如何从 640×640 逐步缩小到 20×20</p><p>Neck 先上采样融合细节，再下采样融合语义</p><p>Head 三个分支分别检测不同大小的目标</p>';
+  }
+}
+
+showLayer(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>YOLOv11 网络架构可视化</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+h1 { text-align: center; color: #7ecfff; margin: 20px 0 10px; font-size: 28px; }
+.subtitle { text-align: center; color: #888; margin-bottom: 30px; font-size: 14px; }
+
+.controls { text-align: center; margin-bottom: 20px; }
+.controls button {
+  background: #1a3a5c; color: #7ecfff; border: 1px solid #2a5a8c;
+  padding: 8px 20px; margin: 0 5px; border-radius: 6px; cursor: pointer;
+  font-size: 14px; transition: all 0.3s;
+}
+.controls button:hover { background: #2a5a8c; }
+.controls button.active { background: #3a7acc; border-color: #5a9aec; }
+
+.view-label { text-align: center; color: #ffa94d; font-size: 18px; margin: 10px 0 20px; font-weight: bold; }
+
+canvas { display: block; margin: 0 auto; background: #0d1117; border-radius: 12px; border: 1px solid #1a2a3a; }
+
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 20px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.legend-color { width: 16px; height: 16px; border-radius: 3px; }
+
+.info-panel {
+  background: #111827; border: 1px solid #1f2937; border-radius: 10px;
+  padding: 15px 20px; margin-top: 20px; font-size: 14px; line-height: 1.8;
+}
+.info-panel h3 { color: #7ecfff; margin-bottom: 8px; }
+.highlight { color: #ffa94d; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>YOLOv11 网络架构可视化</h1>
+  <p class="subtitle">点击按钮切换"简化视图"和"详细视图"，理解每一步内部到底有多少层</p>
+
+  <div class="controls">
+    <button id="btnSimple" class="active" onclick="switchView('simple')">简化视图（漏斗）</button>
+    <button id="btnDetailed" onclick="switchView('detailed')">详细视图（真实层数）</button>
+    <button id="btnFull" onclick="switchView('full')">完整架构（Backbone+Neck+Head）</button>
+  </div>
+  <div class="view-label" id="viewLabel">简化视图：每个阶段看起来只有"一层"</div>
+
+  <canvas id="canvas" width="1160" height="700"></canvas>
+
+  <div class="legend" id="legend"></div>
+  <div class="info-panel" id="infoPanel"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let currentView = 'simple';
+let animFrame = 0;
+let animId = null;
+
+const COLORS = {
+  cbs: '#4a9eff',
+  c3k2: '#ff6b6b',
+  sppf: '#51cf66',
+  c2psa: '#ffa94d',
+  detect: '#cc5de8',
+  upsample: '#20c997',
+  concat: '#fab005',
+  arrow: '#3a5a7a',
+  text: '#c0d0e0',
+  dim: '#556677',
+  input: '#7ecfff',
+  output: '#ff6b9d',
+  bg_backbone: 'rgba(74,158,255,0.06)',
+  bg_neck: 'rgba(32,201,151,0.06)',
+  bg_head: 'rgba(204,93,232,0.06)',
+};
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+  document.getElementById(view === 'simple' ? 'btnSimple' : view === 'detailed' ? 'btnDetailed' : 'btnFull').classList.add('active');
+  
+  const labels = {
+    simple: '简化视图：每个阶段看起来只有"一层"，实际内部藏了很多层',
+    detailed: '详细视图：展开每个阶段内部的真实结构（C3k2、SPPF、C2PSA等）',
+    full: '完整架构：Backbone → Neck → Head 三大部门 + 后处理'
+  };
+  document.getElementById('viewLabel').textContent = labels[view];
+  
+  animFrame = 0;
+  if (animId) cancelAnimationFrame(animId);
+  animate();
+  updateLegend(view);
+  updateInfo(view);
+}
+
+function roundRect(x, y, w, h, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+}
+
+function drawArrow(x1, y1, x2, y2, color) {
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.strokeStyle = color || COLORS.arrow;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const sz = 8;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - sz * Math.cos(angle - 0.4), y2 - sz * Math.sin(angle - 0.4));
+  ctx.lineTo(x2 - sz * Math.cos(angle + 0.4), y2 - sz * Math.sin(angle + 0.4));
+  ctx.closePath();
+  ctx.fillStyle = color || COLORS.arrow;
+  ctx.fill();
+}
+
+function drawBlock(x, y, w, h, color, label, sublabel) {
+  const alpha = Math.min(1, animFrame / 30);
+  ctx.globalAlpha = alpha;
+  roundRect(x, y, w, h, 6, color + '33', color);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 13px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, x + w/2, y + h/2 + (sublabel ? -4 : 5));
+  if (sublabel) {
+    ctx.font = '11px Segoe UI';
+    ctx.fillStyle = COLORS.dim;
+    ctx.fillText(sublabel, x + w/2, y + h/2 + 12);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSimpleView() {
+  const stages = [
+    { size: '640×640×3', w: 500, label: '输入图片', color: COLORS.input },
+    { size: '320×320×64', w: 430, label: '卷积层（缩小2倍）', color: COLORS.cbs },
+    { size: '160×160×128', w: 360, label: '卷积层（缩小2倍）', color: COLORS.cbs },
+    { size: '80×80×256', w: 290, label: '卷积层（缩小2倍）', color: COLORS.c3k2, out: '→ 特征图1 (stride=8, 小目标)' },
+    { size: '40×40×512', w: 220, label: '卷积层（缩小2倍）', color: COLORS.sppf, out: '→ 特征图2 (stride=16, 中目标)' },
+    { size: '20×20×1024', w: 150, label: '卷积层（缩小2倍）', color: COLORS.c2psa, out: '→ 特征图3 (stride=32, 大目标)' },
+  ];
+
+  const startY = 40;
+  const stepH = 100;
+  const cx = 480;
+
+  for (let i = 0; i < stages.length; i++) {
+    const s = stages[i];
+    const y = startY + i * stepH;
+    const x = cx - s.w / 2;
+    const progress = Math.min(1, Math.max(0, (animFrame - i * 8) / 20));
+    if (progress <= 0) continue;
+
+    ctx.globalAlpha = progress;
+    roundRect(x, y, s.w, 55, 8, s.color + '22', s.color);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.label, cx, y + 22);
+    
+    ctx.font = '12px Segoe UI';
+    ctx.fillStyle = COLORS.dim;
+    ctx.fillText(s.size, cx, y + 42);
+
+    if (s.out) {
+      ctx.fillStyle = COLORS.output;
+      ctx.font = 'bold 13px Segoe UI';
+      ctx.textAlign = 'left';
+      ctx.fillText(s.out, cx + s.w / 2 + 15, y + 30);
+    }
+
+    if (i > 0) {
+      ctx.globalAlpha = progress;
+      drawArrow(cx, y - stepH + 55 + 5, cx, y - 5, COLORS.arrow);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.globalAlpha = Math.min(1, Math.max(0, (animFrame - 50) / 20));
+  ctx.fillStyle = '#ff6b6b';
+  ctx.font = 'bold 16px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText('⚠ 这只是简化图！每个"卷积层"内部实际有很多层 →', cx, startY + 6 * stepH + 30);
+  ctx.fillStyle = COLORS.dim;
+  ctx.font = '14px Segoe UI';
+  ctx.fillText('点击"详细视图"查看每个阶段的真实内部结构', cx, startY + 6 * stepH + 55);
+  ctx.globalAlpha = 1;
+}
+
+function drawDetailedView() {
+  const cx = 580;
+  const startY = 15;
+  let y = startY;
+
+  const stages = [
+    { label: '输入', size: '640×640×3', blocks: [], w: 520 },
+    { label: 'Stage 1', size: '→ 320×320', blocks: [
+      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' }
+    ], w: 480 },
+    { label: 'Stage 2', size: '→ 160×160', blocks: [
+      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
+      { name: 'C3k2', color: COLORS.c3k2, detail: '2个bottleneck' },
+    ], w: 430 },
+    { label: 'Stage 3', size: '→ 80×80', blocks: [
+      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
+      { name: 'C3k2', color: COLORS.c3k2, detail: '4个bottleneck' },
+    ], w: 370, out: '特征图P3 (stride=8)' },
+    { label: 'Stage 4', size: '→ 40×40', blocks: [
+      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
+      { name: 'C3k2', color: COLORS.c3k2, detail: '4个bottleneck' },
+      { name: 'SPPF', color: COLORS.sppf, detail: '3×MaxPool 5×5' },
+      { name: 'C2PSA', color: COLORS.c2psa, detail: '注意力机制' },
+    ], w: 300, out: '特征图P4 (stride=16)' },
+    { label: 'Stage 5', size: '→ 20×20', blocks: [
+      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
+      { name: 'C3k2', color: COLORS.c3k2, detail: '2个bottleneck' },
+    ], w: 230, out: '特征图P5 (stride=32)' },
+  ];
+
+  ctx.fillStyle = '#7ecfff';
+  ctx.font = 'bold 12px Segoe UI';
+  ctx.textAlign = 'left';
+  ctx.fillText('阶段', 15, startY + 12);
+  ctx.fillText('分辨率', 80, startY + 12);
+  ctx.fillText('内部结构（每个方块 = 一组卷积层）', 200, startY + 12);
+  y += 25;
+
+  for (let i = 0; i < stages.length; i++) {
+    const s = stages[i];
+    const progress = Math.min(1, Math.max(0, (animFrame - i * 10) / 20));
+    if (progress <= 0) { y += 95; continue; }
+    ctx.globalAlpha = progress;
+
+    roundRect(10, y, 1140, 82, 8, i === 0 ? COLORS.input + '11' : '#ffffff08', '#1a2a3a');
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px Segoe UI';
+    ctx.textAlign = 'left';
+    ctx.fillText(s.label, 20, y + 25);
+    ctx.font = '12px Segoe UI';
+    ctx.fillStyle = COLORS.dim;
+    ctx.fillText(s.size, 80, y + 25);
+
+    if (i === 0) {
+      ctx.fillStyle = COLORS.input;
+      ctx.font = 'bold 14px Segoe UI';
+      ctx.fillText('RGB 图片输入', 200, y + 45);
+    }
+
+    let bx = 200;
+    for (let j = 0; j < s.blocks.length; j++) {
+      const b = s.blocks[j];
+      const bw = b.name === 'C2PSA' ? 120 : b.name === 'SPPF' ? 110 : b.name === 'C3k2' ? 130 : 90;
+      drawBlock(bx, y + 10, bw, 60, b.color, b.name, b.detail);
+      if (j < s.blocks.length - 1) {
+        drawArrow(bx + bw + 3, y + 40, bx + bw + 18, y + 40, COLORS.arrow);
+      }
+      bx += bw + 22;
+    }
+
+    if (s.out) {
+      ctx.fillStyle = COLORS.output;
+      ctx.font = 'bold 13px Segoe UI';
+      ctx.textAlign = 'right';
+      ctx.fillText(s.out, 1140, y + 45);
+      
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      ctx.moveTo(bx, y + 40);
+      ctx.lineTo(1040, y + 40);
+      ctx.strokeStyle = COLORS.output + '66';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (i > 0) {
+      drawArrow(cx - 200, y - 8, cx - 200, y + 3, COLORS.arrow);
+    }
+
+    ctx.globalAlpha = 1;
+    y += 95;
+  }
+
+  const totalProgress = Math.min(1, Math.max(0, (animFrame - 65) / 20));
+  ctx.globalAlpha = totalProgress;
+  roundRect(10, y + 10, 1140, 80, 8, '#ff6b6b11', '#ff6b6b44');
+  ctx.fillStyle = '#ff6b6b';
+  ctx.font = 'bold 15px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText('真实层数统计', 580, y + 35);
+  ctx.font = '13px Segoe UI';
+  ctx.fillStyle = '#e0e0e0';
+  ctx.fillText('每个 CBS = 3层（Conv+BN+SiLU）  |  每个 C3k2 = 2~6个bottleneck×2层 = 4~12层  |  C2PSA = ~8层  |  SPPF = ~5层', 580, y + 55);
+  ctx.fillStyle = COLORS.c2psa;
+  ctx.font = 'bold 14px Segoe UI';
+  ctx.fillText('仅 Backbone 就有 ~80 层！  YOLO11n 总计 ~238 层，YOLO11x 总计 ~600+ 层', 580, y + 78);
+  ctx.globalAlpha = 1;
+}
+
+function drawFullView() {
+  const startY = 8;
+  const colW = 370;
+  const sections = [
+    { name: 'Backbone（信息采集部）', color: COLORS.bg_backbone, border: COLORS.cbs, x: 10, items: [
+      { name: 'CBS', color: COLORS.cbs, sub: '640→320' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '320' },
+      { name: 'CBS', color: COLORS.cbs, sub: '320→160' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '160' },
+      { name: 'CBS', color: COLORS.cbs, sub: '160→80 ★P3' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '80' },
+      { name: 'CBS', color: COLORS.cbs, sub: '80→40 ★P4' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '40' },
+      { name: 'SPPF', color: COLORS.sppf, sub: '多尺度池化' },
+      { name: 'C2PSA', color: COLORS.c2psa, sub: '注意力' },
+      { name: 'CBS', color: COLORS.cbs, sub: '40→20 ★P5' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '20' },
+    ]},
+    { name: 'Neck（信息整合部）', color: COLORS.bg_neck, border: COLORS.upsample, x: 400, items: [
+      { name: 'Upsample', color: COLORS.upsample, sub: '20→40' },
+      { name: 'Concat', color: COLORS.concat, sub: '+P4特征' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '融合40×40' },
+      { name: 'Upsample', color: COLORS.upsample, sub: '40→80' },
+      { name: 'Concat', color: COLORS.concat, sub: '+P3特征' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '融合80×80' },
+      { name: 'CBS↓', color: COLORS.cbs, sub: '80→40' },
+      { name: 'Concat', color: COLORS.concat, sub: '+中层特征' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '融合40×40' },
+      { name: 'CBS↓', color: COLORS.cbs, sub: '40→20' },
+      { name: 'Concat', color: COLORS.concat, sub: '+大层特征' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '融合20×20' },
+    ]},
+    { name: 'Head（决策输出部）', color: COLORS.bg_head, border: COLORS.detect, x: 790, items: [
+      { name: '80×80分支', color: COLORS.detect, sub: '小目标检测' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '特征精炼' },
+      { name: 'Detect', color: COLORS.detect, sub: '80类+DFL' },
+      { name: '40×40分支', color: COLORS.detect, sub: '中目标检测' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '特征精炼' },
+      { name: 'Detect', color: COLORS.detect, sub: '80类+DFL' },
+      { name: '20×20分支', color: COLORS.detect, sub: '大目标检测' },
+      { name: 'C3k2', color: COLORS.c3k2, sub: '特征精炼' },
+      { name: 'Detect', color: COLORS.detect, sub: '80类+DFL' },
+      { name: '─────', color: '#333', sub: '' },
+      { name: 'CPU后处理', color: COLORS.output, sub: 'sigmoid+NMS' },
+      { name: '最终结果', color: COLORS.output, sub: '框+类别+概率' },
+    ]},
+  ];
+
+  for (let s = 0; s < sections.length; s++) {
+    const sec = sections[s];
+    const progress = Math.min(1, Math.max(0, (animFrame - s * 15) / 25));
+    if (progress <= 0) continue;
+    ctx.globalAlpha = progress;
+
+    roundRect(sec.x, startY, colW, 680, 10, sec.color, sec.border + '66');
+
+    ctx.fillStyle = sec.border;
+    ctx.font = 'bold 15px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText(sec.name, sec.x + colW / 2, startY + 25);
+
+    for (let i = 0; i < sec.items.length; i++) {
+      const item = sec.items[i];
+      const iy = startY + 40 + i * 52;
+      const itemProgress = Math.min(1, Math.max(0, (animFrame - s * 15 - i * 3) / 15));
+      if (itemProgress <= 0) continue;
+      ctx.globalAlpha = progress * itemProgress;
+
+      if (item.name === '─────') {
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.moveTo(sec.x + 20, iy + 15);
+        ctx.lineTo(sec.x + colW - 20, iy + 15);
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+
+      const bw = colW - 40;
+      roundRect(sec.x + 20, iy, bw, 42, 6, item.color + '22', item.color + '88');
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px Segoe UI';
+      ctx.textAlign = 'left';
+      ctx.fillText(item.name, sec.x + 32, iy + 18);
+      ctx.fillStyle = COLORS.dim;
+      ctx.font = '11px Segoe UI';
+      ctx.fillText(item.sub, sec.x + 32, iy + 34);
+
+      if (i > 0 && sec.items[i-1].name !== '─────') {
+        const ax = sec.x + colW / 2;
+        ctx.beginPath();
+        ctx.moveTo(ax, iy - 8);
+        ctx.lineTo(ax, iy - 2);
+        ctx.strokeStyle = COLORS.arrow;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    if (s < sections.length - 1) {
+      const ax1 = sec.x + colW + 5;
+      const ax2 = sections[s + 1].x - 5;
+      const ay = startY + 340;
+      drawArrow(ax1, ay, ax2, ay, sec.border);
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  if (currentView === 'simple') drawSimpleView();
+  else if (currentView === 'detailed') drawDetailedView();
+  else drawFullView();
+}
+
+function animate() {
+  animFrame++;
+  draw();
+  if (animFrame < 150) {
+    animId = requestAnimationFrame(animate);
+  }
+}
+
+function updateLegend(view) {
+  const el = document.getElementById('legend');
+  const items = [
+    { color: COLORS.cbs, label: 'CBS (Conv+BN+SiLU)' },
+    { color: COLORS.c3k2, label: 'C3k2 (CSP+小卷积)' },
+    { color: COLORS.sppf, label: 'SPPF (多尺度池化)' },
+    { color: COLORS.c2psa, label: 'C2PSA (注意力)' },
+  ];
+  if (view === 'full') {
+    items.push({ color: COLORS.upsample, label: 'Upsample (上采样)' });
+    items.push({ color: COLORS.concat, label: 'Concat (拼接)' });
+    items.push({ color: COLORS.detect, label: 'Detect (检测头)' });
+  }
+  el.innerHTML = items.map(i => 
+    `<div class="legend-item"><div class="legend-color" style="background:${i.color}"></div>${i.label}</div>`
+  ).join('');
+}
+
+function updateInfo(view) {
+  const el = document.getElementById('infoPanel');
+  const infos = {
+    simple: `<h3>简化视图说明</h3>
+      <p>这就是之前给你看的"漏斗图"。看起来只有 5 层，但这是<span class="highlight">极度简化</span>的！</p>
+      <p>每个"卷积层（缩小2倍）"实际上内部包含了 <span class="highlight">CBS + C3k2</span>（甚至还有 SPPF 和 C2PSA），每个 C3k2 里面又有 2~6 个 bottleneck，每个 bottleneck 有 2 层卷积。</p>
+      <p>所以实际层数是：<span class="highlight">YOLO11n ≈ 238 层，YOLO11x ≈ 600+ 层</span></p>`,
+    detailed: `<h3>详细视图说明</h3>
+      <p>这个视图展开了每个阶段内部的<span class="highlight">真实组件</span>：</p>
+      <p>• <span class="highlight">CBS</span>：每次负责缩小分辨率（stride=2），同时增加通道数</p>
+      <p>• <span class="highlight">C3k2</span>：一半数据深度处理，一半走捷径，高效提取特征</p>
+      <p>• <span class="highlight">SPPF</span>：三次 MaxPool 叠加，同时获取大/中/小范围信息</p>
+      <p>• <span class="highlight">C2PSA</span>：注意力机制，让网络聚焦重要区域（YOLOv11 新增！）</p>`,
+    full: `<h3>完整架构说明</h3>
+      <p><span class="highlight">Backbone</span>（左）：从图片中逐步提取特征，像漏斗一样越来越小但信息越来越浓缩</p>
+      <p><span class="highlight">Neck</span>（中）：先上采样（小→大）融合浅层细节，再下采样（大→小）融合深层语义。这叫 <span class="highlight">FPN + PAN</span> 结构</p>
+      <p><span class="highlight">Head</span>（右）：三个分支分别检测小/中/大目标，最后由 CPU 做 sigmoid + NMS 后处理</p>
+      <p>整个过程：<span class="highlight">图片 → Backbone提取特征 → Neck融合多尺度 → Head输出检测结果 → CPU后处理 → 最终框+类别+概率</span></p>`
+  };
+  el.innerHTML = infos[view];
+}
+
+switchView('simple');
+</script>
+</body>
+</html>
