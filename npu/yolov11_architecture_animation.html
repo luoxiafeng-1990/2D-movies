@@ -2,53 +2,75 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>YOLOv11 网络架构可视化</title>
+<title>YOLOv11 网络架构可视化 — 含 Scale 图解</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0a0a1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; overflow-x: hidden; }
-.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-h1 { text-align: center; color: #7ecfff; margin: 20px 0 10px; font-size: 28px; }
-.subtitle { text-align: center; color: #888; margin-bottom: 30px; font-size: 14px; }
+.container { max-width: 1400px; margin: 0 auto; padding: 12px; }
+h1 { text-align: center; color: #7ecfff; margin: 8px 0 4px; font-size: 24px; }
+.subtitle { text-align: center; color: #c0d0e0; margin-bottom: 10px; font-size: 12px; }
 
-.controls { text-align: center; margin-bottom: 20px; }
-.controls button {
+.tabs { display: flex; justify-content: center; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.tabs button {
   background: #1a3a5c; color: #7ecfff; border: 1px solid #2a5a8c;
-  padding: 8px 20px; margin: 0 5px; border-radius: 6px; cursor: pointer;
-  font-size: 14px; transition: all 0.3s;
+  padding: 6px 14px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; transition: all 0.3s; white-space: nowrap;
 }
-.controls button:hover { background: #2a5a8c; }
-.controls button.active { background: #3a7acc; border-color: #5a9aec; }
+.tabs button:hover { background: #2a5a8c; }
+.tabs button.active { background: #3a7acc; border-color: #5a9aec; }
 
-.view-label { text-align: center; color: #ffa94d; font-size: 18px; margin: 10px 0 20px; font-weight: bold; }
+.model-bar { display: flex; justify-content: center; align-items: center; gap: 4px; margin: 6px 0; }
+.model-bar span { color: #c0d0e0; font-size: 12px; margin-right: 4px; }
+.model-bar button {
+  background: #1a2a3c; color: #d0dae4; border: 1px solid #2a3a4c;
+  padding: 4px 12px; border-radius: 5px; cursor: pointer;
+  font-size: 12px; font-weight: bold; transition: all 0.3s;
+}
+.model-bar button:hover { background: #2a3a5c; color: #fff; }
+.model-bar button.sel { background: #ff6b3a; border-color: #ff8a5c; color: #fff; }
+
+.view-label { text-align: center; color: #ffa94d; font-size: 14px; margin: 4px 0 8px; font-weight: bold; }
 
 canvas { display: block; margin: 0 auto; background: #0d1117; border-radius: 12px; border: 1px solid #1a2a3a; }
 
-.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 20px; }
-.legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.legend-color { width: 16px; height: 16px; border-radius: 3px; }
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 10px; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.legend-color { width: 12px; height: 12px; border-radius: 3px; }
 
 .info-panel {
   background: #111827; border: 1px solid #1f2937; border-radius: 10px;
-  padding: 15px 20px; margin-top: 20px; font-size: 14px; line-height: 1.8;
+  padding: 10px 16px; margin-top: 10px; font-size: 12px; line-height: 1.6;
 }
-.info-panel h3 { color: #7ecfff; margin-bottom: 8px; }
-.highlight { color: #ffa94d; font-weight: bold; }
+.info-panel h3 { color: #7ecfff; margin-bottom: 4px; font-size: 14px; }
+.hl { color: #ffa94d; font-weight: bold; }
+.hl2 { color: #7ecfff; font-weight: bold; }
+.hl3 { color: #51cf66; font-weight: bold; }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>YOLOv11 网络架构可视化</h1>
-  <p class="subtitle">点击按钮切换"简化视图"和"详细视图"，理解每一步内部到底有多少层</p>
+  <p class="subtitle">切换视图理解网络结构 | 切换型号理解 Scale 缩放</p>
 
-  <div class="controls">
-    <button id="btnSimple" class="active" onclick="switchView('simple')">简化视图（漏斗）</button>
-    <button id="btnDetailed" onclick="switchView('detailed')">详细视图（真实层数）</button>
-    <button id="btnFull" onclick="switchView('full')">完整架构（Backbone+Neck+Head）</button>
+  <div class="tabs">
+    <button id="btnSimple" class="active" onclick="switchView('simple')">1. 漏斗图</button>
+    <button id="btnScale" onclick="switchView('scale')">2. Scale 图解</button>
+    <button id="btnDetailed" onclick="switchView('detailed')">3. 详细视图</button>
+    <button id="btnFull" onclick="switchView('full')">4. 完整架构</button>
+    <button id="btnCompare" onclick="switchView('compare')">5. 型号对比</button>
   </div>
-  <div class="view-label" id="viewLabel">简化视图：每个阶段看起来只有"一层"</div>
 
-  <canvas id="canvas" width="1160" height="700"></canvas>
+  <div class="model-bar" id="modelBar">
+    <span>型号:</span>
+    <button onclick="selectModel('n')">11n</button>
+    <button onclick="selectModel('s')" class="sel">11s</button>
+    <button onclick="selectModel('m')">11m</button>
+    <button onclick="selectModel('l')">11l</button>
+    <button onclick="selectModel('x')">11x</button>
+  </div>
 
+  <div class="view-label" id="viewLabel">漏斗图</div>
+  <canvas id="canvas" width="1360" height="850"></canvas>
   <div class="legend" id="legend"></div>
   <div class="info-panel" id="infoPanel"></div>
 </div>
@@ -57,430 +79,716 @@ canvas { display: block; margin: 0 auto; background: #0d1117; border-radius: 12p
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 let currentView = 'simple';
+let currentModel = 's';
 let animFrame = 0;
 let animId = null;
 
-const COLORS = {
-  cbs: '#4a9eff',
-  c3k2: '#ff6b6b',
-  sppf: '#51cf66',
-  c2psa: '#ffa94d',
-  detect: '#cc5de8',
-  upsample: '#20c997',
-  concat: '#fab005',
-  arrow: '#3a5a7a',
-  text: '#c0d0e0',
-  dim: '#556677',
-  input: '#7ecfff',
-  output: '#ff6b9d',
-  bg_backbone: 'rgba(74,158,255,0.06)',
-  bg_neck: 'rgba(32,201,151,0.06)',
-  bg_head: 'rgba(204,93,232,0.06)',
+const C = {
+  cbs:'#4a9eff', c3k2:'#ff6b6b', sppf:'#51cf66', c2psa:'#ffa94d',
+  detect:'#cc5de8', up:'#20c997', concat:'#fab005',
+  arrow:'#5a8ab0', dim:'#b0c0d0', input:'#7ecfff', output:'#ff6b9d',
+  kernel:'#ff6b3a', width_c:'#ffa94d', depth_c:'#7ecfff', maxch_c:'#ff6b6b',
+};
+const MC = { n:'#51cf66', s:'#4a9eff', m:'#ffa94d', l:'#ff6b6b', x:'#cc5de8' };
+const SC = {
+  n:{d:0.50,w:0.25,mc:1024,lbl:'nano'},  s:{d:0.50,w:0.50,mc:1024,lbl:'small'},
+  m:{d:0.50,w:1.00,mc:512, lbl:'medium'},l:{d:1.00,w:1.00,mc:512, lbl:'large'},
+  x:{d:1.00,w:1.50,mc:512, lbl:'xlarge'},
 };
 
-function switchView(view) {
-  currentView = view;
-  document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
-  document.getElementById(view === 'simple' ? 'btnSimple' : view === 'detailed' ? 'btnDetailed' : 'btnFull').classList.add('active');
-  
-  const labels = {
-    simple: '简化视图：每个阶段看起来只有"一层"，实际内部藏了很多层',
-    detailed: '详细视图：展开每个阶段内部的真实结构（C3k2、SPPF、C2PSA等）',
-    full: '完整架构：Backbone → Neck → Head 三大部门 + 后处理'
-  };
-  document.getElementById('viewLabel').textContent = labels[view];
-  
-  animFrame = 0;
-  if (animId) cancelAnimationFrame(animId);
-  animate();
-  updateLegend(view);
-  updateInfo(view);
-}
+function getCh(base,m){ return Math.min(Math.round(base*SC[m].w), SC[m].mc); }
+function getRep(base,m){ return base ? Math.max(1,Math.ceil(base*SC[m].d)) : 1; }
 
-function roundRect(x, y, w, h, r, fill, stroke) {
+function rr(x,y,w,h,r,fill,stroke,lw){
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r); ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h); ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r); ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+  if(fill){ctx.fillStyle=fill;ctx.fill();}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||1.5;ctx.stroke();}
 }
 
-function drawArrow(x1, y1, x2, y2, color) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.strokeStyle = color || COLORS.arrow;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  const angle = Math.atan2(y2 - y1, x2 - x1);
-  const sz = 8;
-  ctx.beginPath();
-  ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - sz * Math.cos(angle - 0.4), y2 - sz * Math.sin(angle - 0.4));
-  ctx.lineTo(x2 - sz * Math.cos(angle + 0.4), y2 - sz * Math.sin(angle + 0.4));
-  ctx.closePath();
-  ctx.fillStyle = color || COLORS.arrow;
-  ctx.fill();
+function arrow(x1,y1,x2,y2,col,lw){
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);
+  ctx.strokeStyle=col||C.arrow;ctx.lineWidth=lw||2;ctx.stroke();
+  const a=Math.atan2(y2-y1,x2-x1),s=7;
+  ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-s*Math.cos(a-0.4),y2-s*Math.sin(a-0.4));
+  ctx.lineTo(x2-s*Math.cos(a+0.4),y2-s*Math.sin(a+0.4));
+  ctx.closePath();ctx.fillStyle=col||C.arrow;ctx.fill();
 }
 
-function drawBlock(x, y, w, h, color, label, sublabel) {
-  const alpha = Math.min(1, animFrame / 30);
-  ctx.globalAlpha = alpha;
-  roundRect(x, y, w, h, 6, color + '33', color);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 13px Segoe UI';
-  ctx.textAlign = 'center';
-  ctx.fillText(label, x + w/2, y + h/2 + (sublabel ? -4 : 5));
-  if (sublabel) {
-    ctx.font = '11px Segoe UI';
-    ctx.fillStyle = COLORS.dim;
-    ctx.fillText(sublabel, x + w/2, y + h/2 + 12);
-  }
-  ctx.globalAlpha = 1;
+function txt(text,x,y,font,color,align){
+  ctx.font=font;ctx.fillStyle=color;ctx.textAlign=align||'left';ctx.fillText(text,x,y);
 }
 
-function drawSimpleView() {
-  const stages = [
-    { size: '640×640×3', w: 500, label: '输入图片', color: COLORS.input },
-    { size: '320×320×64', w: 430, label: '卷积层（缩小2倍）', color: COLORS.cbs },
-    { size: '160×160×128', w: 360, label: '卷积层（缩小2倍）', color: COLORS.cbs },
-    { size: '80×80×256', w: 290, label: '卷积层（缩小2倍）', color: COLORS.c3k2, out: '→ 特征图1 (stride=8, 小目标)' },
-    { size: '40×40×512', w: 220, label: '卷积层（缩小2倍）', color: COLORS.sppf, out: '→ 特征图2 (stride=16, 中目标)' },
-    { size: '20×20×1024', w: 150, label: '卷积层（缩小2倍）', color: COLORS.c2psa, out: '→ 特征图3 (stride=32, 大目标)' },
+function drawBlock(x,y,w,h,col,label,sub){
+  rr(x,y,w,h,5,col+'33',col);
+  txt(label,x+w/2,y+h/2+(sub?-5:4),'bold 12px Segoe UI','#fff','center');
+  if(sub) txt(sub,x+w/2,y+h/2+10,'10px Segoe UI',C.dim,'center');
+}
+
+// ======================== TAB 1: FUNNEL ========================
+function drawSimpleView(){
+  const m=currentModel, sc=SC[m];
+  const stages=[
+    {baseCh:0,   sp:'640×640',lbl:'输入图片 (RGB)',isInput:true,px:640},
+    {baseCh:64,  sp:'320×320',lbl:'Conv (stride=2)',px:320},
+    {baseCh:128, sp:'160×160',lbl:'Conv + C3k2',px:160},
+    {baseCh:256, sp:'80×80',  lbl:'Conv + C3k2',px:80,  out:'→ P3 (stride=8, 小目标)'},
+    {baseCh:512, sp:'40×40',  lbl:'Conv+C3k2+SPPF+C2PSA',px:40,out:'→ P4 (stride=16, 中目标)'},
+    {baseCh:1024,sp:'20×20',  lbl:'Conv + C3k2',px:20,  out:'→ P5 (stride=32, 大目标)'},
   ];
 
-  const startY = 40;
-  const stepH = 100;
-  const cx = 480;
+  const leftX = 60;
+  const funnelCx = 350;
+  const rightInfoX = 700;
+  const startY = 55;
+  const stepH = 120;
 
-  for (let i = 0; i < stages.length; i++) {
-    const s = stages[i];
-    const y = startY + i * stepH;
-    const x = cx - s.w / 2;
-    const progress = Math.min(1, Math.max(0, (animFrame - i * 8) / 20));
-    if (progress <= 0) continue;
+  txt('YOLO11'+m+' ('+sc.lbl+')',15,20,'bold 15px Segoe UI',MC[m]);
+  txt('width='+sc.w+'  depth='+sc.d+'  max_ch='+sc.mc,15,38,'12px Segoe UI','#c0ccd8');
 
-    ctx.globalAlpha = progress;
-    roundRect(x, y, s.w, 55, 8, s.color + '22', s.color);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 14px Segoe UI';
-    ctx.textAlign = 'center';
-    ctx.fillText(s.label, cx, y + 22);
-    
-    ctx.font = '12px Segoe UI';
-    ctx.fillStyle = COLORS.dim;
-    ctx.fillText(s.size, cx, y + 42);
+  txt('← 空间尺寸（漏斗）→',funnelCx,startY-8,'12px Segoe UI','#a0b0c0','center');
+  txt('卷积核数（通道数）',rightInfoX+100,startY-8,'12px Segoe UI','#a0b0c0','center');
 
-    if (s.out) {
-      ctx.fillStyle = COLORS.output;
-      ctx.font = 'bold 13px Segoe UI';
-      ctx.textAlign = 'left';
-      ctx.fillText(s.out, cx + s.w / 2 + 15, y + 30);
-    }
+  for(let i=0;i<stages.length;i++){
+    const s=stages[i];
+    const ch = s.isInput ? 3 : getCh(s.baseCh, m);
+    const y = startY + i*stepH;
+    const pr = Math.min(1,Math.max(0,(animFrame-i*8)/20));
+    if(pr<=0) continue;
+    ctx.globalAlpha=pr;
 
-    if (i > 0) {
-      ctx.globalAlpha = progress;
-      drawArrow(cx, y - stepH + 55 + 5, cx, y - 5, COLORS.arrow);
-    }
-    ctx.globalAlpha = 1;
-  }
+    const maxW=500, minW=80;
+    const boxW = minW + (maxW-minW)*(s.px/640);
+    const x = funnelCx - boxW/2;
 
-  ctx.globalAlpha = Math.min(1, Math.max(0, (animFrame - 50) / 20));
-  ctx.fillStyle = '#ff6b6b';
-  ctx.font = 'bold 16px Segoe UI';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚠ 这只是简化图！每个"卷积层"内部实际有很多层 →', cx, startY + 6 * stepH + 30);
-  ctx.fillStyle = COLORS.dim;
-  ctx.font = '14px Segoe UI';
-  ctx.fillText('点击"详细视图"查看每个阶段的真实内部结构', cx, startY + 6 * stepH + 55);
-  ctx.globalAlpha = 1;
-}
+    const col = s.isInput ? C.input :
+      ch<=64?C.cbs : ch<=128?C.c3k2 : ch<=256?C.sppf : ch<=512?C.c2psa : C.detect;
 
-function drawDetailedView() {
-  const cx = 580;
-  const startY = 15;
-  let y = startY;
+    rr(x,y,boxW,65,8,col+'22',col,2);
+    txt(s.lbl,funnelCx,y+20,'bold 13px Segoe UI','#fff','center');
+    txt(s.sp+(s.isInput?'×3':''),funnelCx,y+40,'12px Segoe UI','#dde4ec','center');
 
-  const stages = [
-    { label: '输入', size: '640×640×3', blocks: [], w: 520 },
-    { label: 'Stage 1', size: '→ 320×320', blocks: [
-      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' }
-    ], w: 480 },
-    { label: 'Stage 2', size: '→ 160×160', blocks: [
-      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
-      { name: 'C3k2', color: COLORS.c3k2, detail: '2个bottleneck' },
-    ], w: 430 },
-    { label: 'Stage 3', size: '→ 80×80', blocks: [
-      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
-      { name: 'C3k2', color: COLORS.c3k2, detail: '4个bottleneck' },
-    ], w: 370, out: '特征图P3 (stride=8)' },
-    { label: 'Stage 4', size: '→ 40×40', blocks: [
-      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
-      { name: 'C3k2', color: COLORS.c3k2, detail: '4个bottleneck' },
-      { name: 'SPPF', color: COLORS.sppf, detail: '3×MaxPool 5×5' },
-      { name: 'C2PSA', color: COLORS.c2psa, detail: '注意力机制' },
-    ], w: 300, out: '特征图P4 (stride=16)' },
-    { label: 'Stage 5', size: '→ 20×20', blocks: [
-      { name: 'CBS', color: COLORS.cbs, detail: '3×3 conv, s=2' },
-      { name: 'C3k2', color: COLORS.c3k2, detail: '2个bottleneck' },
-    ], w: 230, out: '特征图P5 (stride=32)' },
-  ];
+    // Left side: spatial dimension label
+    txt(s.sp,leftX,y+36,'bold 14px Segoe UI','#8af','center');
 
-  ctx.fillStyle = '#7ecfff';
-  ctx.font = 'bold 12px Segoe UI';
-  ctx.textAlign = 'left';
-  ctx.fillText('阶段', 15, startY + 12);
-  ctx.fillText('分辨率', 80, startY + 12);
-  ctx.fillText('内部结构（每个方块 = 一组卷积层）', 200, startY + 12);
-  y += 25;
+    if(!s.isInput){
+      // Right info area - well spaced
+      const ry = y + 5;
+      txt(ch+'',rightInfoX,ry+16,'bold 28px Segoe UI',C.kernel);
+      txt('个卷积核',rightInfoX+60,ry+16,'bold 14px Segoe UI',C.kernel);
 
-  for (let i = 0; i < stages.length; i++) {
-    const s = stages[i];
-    const progress = Math.min(1, Math.max(0, (animFrame - i * 10) / 20));
-    if (progress <= 0) { y += 95; continue; }
-    ctx.globalAlpha = progress;
-
-    roundRect(10, y, 1140, 82, 8, i === 0 ? COLORS.input + '11' : '#ffffff08', '#1a2a3a');
-
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 13px Segoe UI';
-    ctx.textAlign = 'left';
-    ctx.fillText(s.label, 20, y + 25);
-    ctx.font = '12px Segoe UI';
-    ctx.fillStyle = COLORS.dim;
-    ctx.fillText(s.size, 80, y + 25);
-
-    if (i === 0) {
-      ctx.fillStyle = COLORS.input;
-      ctx.font = 'bold 14px Segoe UI';
-      ctx.fillText('RGB 图片输入', 200, y + 45);
-    }
-
-    let bx = 200;
-    for (let j = 0; j < s.blocks.length; j++) {
-      const b = s.blocks[j];
-      const bw = b.name === 'C2PSA' ? 120 : b.name === 'SPPF' ? 110 : b.name === 'C3k2' ? 130 : 90;
-      drawBlock(bx, y + 10, bw, 60, b.color, b.name, b.detail);
-      if (j < s.blocks.length - 1) {
-        drawArrow(bx + bw + 3, y + 40, bx + bw + 18, y + 40, COLORS.arrow);
+      txt('= base '+s.baseCh+' × width '+sc.w,rightInfoX,ry+36,'12px Segoe UI','#c0ccd8');
+      if(ch !== Math.round(s.baseCh * sc.w)){
+        txt('→ cap '+sc.mc,rightInfoX+160,ry+36,'12px Segoe UI',C.maxch_c);
       }
-      bx += bw + 22;
+
+      // Mini kernel stack visualization
+      const ksX = rightInfoX + 240;
+      const ksY = ry + 4;
+      const showN = Math.min(ch, 8);
+      const ksz = 16, koff = 3;
+      for(let k=showN-1;k>=0;k--){
+        rr(ksX+k*koff, ksY+24-k*koff, ksz, ksz, 2,
+          k===0?col+'99':col+'33', col+'77', 1);
+      }
+      txt('×'+ch, ksX+showN*koff+ksz+4, ksY+34, '10px Segoe UI','#d0dae4');
+
+      if(s.out){
+        txt(s.out, rightInfoX, ry+55, 'bold 12px Segoe UI', C.output);
+      }
     }
 
-    if (s.out) {
-      ctx.fillStyle = COLORS.output;
-      ctx.font = 'bold 13px Segoe UI';
-      ctx.textAlign = 'right';
-      ctx.fillText(s.out, 1140, y + 45);
-      
-      ctx.beginPath();
-      ctx.setLineDash([4, 4]);
-      ctx.moveTo(bx, y + 40);
-      ctx.lineTo(1040, y + 40);
-      ctx.strokeStyle = COLORS.output + '66';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    if (i > 0) {
-      drawArrow(cx - 200, y - 8, cx - 200, y + 3, COLORS.arrow);
-    }
-
-    ctx.globalAlpha = 1;
-    y += 95;
+    if(i>0) arrow(funnelCx, y-stepH+65+5, funnelCx, y-5, C.arrow);
+    ctx.globalAlpha=1;
   }
 
-  const totalProgress = Math.min(1, Math.max(0, (animFrame - 65) / 20));
-  ctx.globalAlpha = totalProgress;
-  roundRect(10, y + 10, 1140, 80, 8, '#ff6b6b11', '#ff6b6b44');
-  ctx.fillStyle = '#ff6b6b';
-  ctx.font = 'bold 15px Segoe UI';
-  ctx.textAlign = 'center';
-  ctx.fillText('真实层数统计', 580, y + 35);
-  ctx.font = '13px Segoe UI';
-  ctx.fillStyle = '#e0e0e0';
-  ctx.fillText('每个 CBS = 3层（Conv+BN+SiLU）  |  每个 C3k2 = 2~6个bottleneck×2层 = 4~12层  |  C2PSA = ~8层  |  SPPF = ~5层', 580, y + 55);
-  ctx.fillStyle = COLORS.c2psa;
-  ctx.font = 'bold 14px Segoe UI';
-  ctx.fillText('仅 Backbone 就有 ~80 层！  YOLO11n 总计 ~238 层，YOLO11x 总计 ~600+ 层', 580, y + 78);
-  ctx.globalAlpha = 1;
+  // Footer summary
+  const footY = startY + stages.length*stepH + 5;
+  ctx.globalAlpha=Math.min(1,Math.max(0,(animFrame-55)/20));
+  rr(15,footY,680,55,8,'#1a1a3a','#334');
+  txt('规律：空间越小 → 卷积核越多（信息越浓缩）',355,footY+18,'bold 13px Segoe UI','#ffa94d','center');
+  txt('640×640×3(大面积少通道) → 20×20×'+getCh(1024,m)+'(小面积多通道)',355,footY+40,'12px Segoe UI','#d0dae4','center');
+  ctx.globalAlpha=1;
 }
 
-function drawFullView() {
-  const startY = 8;
-  const colW = 370;
+// ======================== TAB 2: SCALE EXPLANATION ========================
+function drawScaleView(){
+  const m=currentModel, sc=SC[m];
+  animFrame = 200; // skip animation, show everything
+
+  // ---- Section 1: Width explanation ----
+  const s1x=30, s1y=20;
+  rr(s1x, s1y, 640, 340, 10, '#ffffff05', C.width_c+'44');
+  txt('一、Width（宽度系数）= 每层的员工数量', s1x+20, s1y+25, 'bold 18px Segoe UI', C.width_c);
+  txt('公式：实际卷积核数 = min( base × width,  max_channels )', s1x+20, s1y+50, '13px Segoe UI', '#e8ecf0');
+
+  // Draw 3 model examples side by side
+  const widthModels = ['n','s','x'];
+  const widthLabels = ['nano (w=0.25)','small (w=0.50)','xlarge (w=1.50)'];
+  const baseVal = 64;
+
+  for(let i=0;i<3;i++){
+    const wx = s1x + 30 + i*200;
+    const wy = s1y + 75;
+    const wm = widthModels[i];
+    const wch = getCh(baseVal, wm);
+
+    rr(wx, wy, 180, 240, 8, MC[wm]+'11', MC[wm]+'66');
+    txt('YOLO11'+wm, wx+90, wy+20, 'bold 14px Segoe UI', MC[wm], 'center');
+    txt(widthLabels[i], wx+90, wy+38, '11px Segoe UI', '#d0dae4', 'center');
+
+    // Draw kernel grid
+    const gridY = wy + 52;
+    const cellSz = wch <= 16 ? 18 : wch <= 32 ? 12 : 8;
+    const cols = wch <= 16 ? 4 : wch <= 32 ? 8 : 12;
+    const rows = Math.ceil(wch / cols);
+    const gridW = cols * (cellSz + 2);
+    const gx = wx + (180 - gridW) / 2;
+
+    for(let r=0; r<rows; r++){
+      for(let c=0; c<cols; c++){
+        const idx = r*cols+c;
+        if(idx >= wch) break;
+        rr(gx+c*(cellSz+2), gridY+r*(cellSz+2), cellSz, cellSz, 2, MC[wm]+'66', MC[wm], 1);
+      }
+    }
+
+    const gridBottom = gridY + rows*(cellSz+2) + 8;
+    txt(wch+' 个卷积核', wx+90, gridBottom, 'bold 16px Segoe UI', '#fff', 'center');
+    txt('base 64 × '+SC[wm].w+' = '+wch, wx+90, gridBottom+18, '11px Segoe UI', '#c0ccd8', 'center');
+
+    // Person icon analogy
+    txt('👤'.repeat(Math.min(wch/4, 8)), wx+90, gridBottom+40, '14px Segoe UI', '#fff', 'center');
+    txt(wch+'个员工', wx+90, gridBottom+58, '11px Segoe UI', '#d0dae4', 'center');
+  }
+
+  // ---- Section 2: Depth explanation ----
+  const s2x = 690, s2y = 20;
+  rr(s2x, s2y, 640, 340, 10, '#ffffff05', C.depth_c+'44');
+  txt('二、Depth（深度系数）= 重复工作几轮', s2x+20, s2y+25, 'bold 18px Segoe UI', C.depth_c);
+  txt('公式：实际重复次数 = ceil( base_repeat × depth )', s2x+20, s2y+50, '13px Segoe UI', '#e8ecf0');
+
+  // depth=0.5 example (n/s/m)
+  const d1x = s2x+30, d1y = s2y+70;
+  rr(d1x, d1y, 280, 240, 8, '#51cf6611', '#51cf6666');
+  txt('depth = 0.5 (n / s / m)', d1x+140, d1y+22, 'bold 13px Segoe UI', '#51cf66', 'center');
+  txt('C3k2 模块内部:', d1x+20, d1y+50, '12px Segoe UI', '#dde4ec');
+
+  rr(d1x+20, d1y+65, 240, 55, 6, C.c3k2+'33', C.c3k2);
+  txt('Bottleneck #1', d1x+140, d1y+85, 'bold 13px Segoe UI', '#fff', 'center');
+  txt('(Conv3×3 → Conv3×3)', d1x+140, d1y+105, '10px Segoe UI', C.dim, 'center');
+
+  rr(d1x+20, d1y+130, 240, 55, 6, '#ffffff08', '#334');
+  txt('(无 Bottleneck #2)', d1x+140, d1y+155, '12px Segoe UI', '#9098a4', 'center');
+  txt('被 depth 砍掉了', d1x+140, d1y+175, '10px Segoe UI', '#9098a4', 'center');
+
+  txt('ceil(2 × 0.5) = 1 次', d1x+140, d1y+210, 'bold 14px Segoe UI', '#51cf66', 'center');
+  txt('只做 1 轮工作', d1x+140, d1y+228, '11px Segoe UI', '#d0dae4', 'center');
+
+  // depth=1.0 example (l/x)
+  const d2x = s2x+340, d2y = s2y+70;
+  rr(d2x, d2y, 280, 240, 8, '#ff6b6b11', '#ff6b6b66');
+  txt('depth = 1.0 (l / x)', d2x+140, d2y+22, 'bold 13px Segoe UI', '#ff6b6b', 'center');
+  txt('C3k2 模块内部:', d2x+20, d2y+50, '12px Segoe UI', '#dde4ec');
+
+  rr(d2x+20, d2y+65, 240, 55, 6, C.c3k2+'33', C.c3k2);
+  txt('Bottleneck #1', d2x+140, d2y+85, 'bold 13px Segoe UI', '#fff', 'center');
+  txt('(Conv3×3 → Conv3×3)', d2x+140, d2y+105, '10px Segoe UI', C.dim, 'center');
+
+  rr(d2x+20, d2y+130, 240, 55, 6, C.c3k2+'33', C.c3k2);
+  txt('Bottleneck #2', d2x+140, d2y+155, 'bold 13px Segoe UI', '#fff', 'center');
+  txt('(Conv3×3 → Conv3×3)', d2x+140, d2y+175, '10px Segoe UI', C.dim, 'center');
+
+  txt('ceil(2 × 1.0) = 2 次', d2x+140, d2y+210, 'bold 14px Segoe UI', '#ff6b6b', 'center');
+  txt('做满 2 轮工作', d2x+140, d2y+228, '11px Segoe UI', '#d0dae4', 'center');
+
+  // ---- Section 3: Channels / 3D Cube ----
+  const s3x = 30, s3y = 380;
+  rr(s3x, s3y, 640, 330, 10, '#ffffff05', '#51cf6644');
+  txt('三、通道（Channels）= 信息的"厚度"', s3x+20, s3y+25, 'bold 18px Segoe UI', '#51cf66');
+  txt('每个通道 = 一种"看问题的角度" = 一个卷积核的输出', s3x+20, s3y+48, '13px Segoe UI', '#e8ecf0');
+
+  // Draw the 3D cube progression
+  const cubes = [
+    {w:80,h:80,d:3,  label:'输入\n640×640×3',  dLabel:'3通道(RGB)',     col:C.input},
+    {w:50,h:50,d:getCh(64,m), label:'Stage1\n320×320',dLabel:getCh(64,m)+'通道', col:C.cbs},
+    {w:35,h:35,d:getCh(256,m),label:'Stage3\n80×80',  dLabel:getCh(256,m)+'通道', col:C.sppf},
+    {w:20,h:20,d:getCh(1024,m),label:'Stage5\n20×20', dLabel:getCh(1024,m)+'通道',col:C.detect},
+  ];
+
+  for(let i=0;i<cubes.length;i++){
+    const cb = cubes[i];
+    const cx = s3x + 60 + i*158;
+    const cy = s3y + 175;
+
+    // Draw front face
+    const fw = cb.w, fh = cb.h;
+    const fx = cx - fw/2, fy = cy - fh/2;
+    rr(fx, fy, fw, fh, 0, cb.col+'44', cb.col, 1.5);
+
+    // Draw depth lines (perspective)
+    const depthPx = Math.min(Math.log2(cb.d+1)*10, 40);
+    const dx = depthPx * 0.7, dy = -depthPx * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(fx,fy); ctx.lineTo(fx+dx,fy+dy);
+    ctx.lineTo(fx+fw+dx,fy+dy); ctx.lineTo(fx+fw,fy);
+    ctx.closePath();
+    ctx.fillStyle=cb.col+'33'; ctx.fill();
+    ctx.strokeStyle=cb.col; ctx.lineWidth=1; ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(fx+fw,fy); ctx.lineTo(fx+fw+dx,fy+dy);
+    ctx.lineTo(fx+fw+dx,fy+fh+dy); ctx.lineTo(fx+fw,fy+fh);
+    ctx.closePath();
+    ctx.fillStyle=cb.col+'22'; ctx.fill();
+    ctx.strokeStyle=cb.col; ctx.lineWidth=1; ctx.stroke();
+
+    // Labels
+    const lines = cb.label.split('\n');
+    txt(lines[0], cx, cy + fh/2 + 18, '11px Segoe UI', '#dde4ec', 'center');
+    if(lines[1]) txt(lines[1], cx, cy + fh/2 + 33, 'bold 12px Segoe UI', '#fff', 'center');
+
+    // Depth label
+    txt(cb.dLabel, cx+dx/2, fy+dy-8, 'bold 11px Segoe UI', cb.col, 'center');
+
+    // Arrow to next
+    if(i<cubes.length-1){
+      arrow(cx+fw/2+depthPx*0.7+10, cy, cx+fw/2+depthPx*0.7+35, cy, C.arrow, 1.5);
+    }
+  }
+
+  txt('面积越来越小', s3x+320, s3y+295, 'bold 13px Segoe UI', '#c0ccd8', 'center');
+  txt('但"厚度"越来越大 → 信息越来越浓缩', s3x+320, s3y+315, 'bold 13px Segoe UI', '#ffa94d', 'center');
+
+  // ---- Section 4: max_channels ----
+  const s4x = 690, s4y = 380;
+  rr(s4x, s4y, 640, 330, 10, '#ffffff05', C.maxch_c+'44');
+  txt('四、max_channels = 员工数上限', s4x+20, s4y+25, 'bold 18px Segoe UI', C.maxch_c);
+  txt('防止深层通道数过大导致计算爆炸', s4x+20, s4y+48, '13px Segoe UI', '#e8ecf0');
+
+  // Example table
+  const tableX = s4x+30, tableY = s4y+70;
+  const colWidths = [80, 90, 100, 80, 90];
+  const headers = ['base', '× width', '= 计算值', 'max_ch', '实际值'];
+  const rowH = 30;
+
+  // Table header
+  rr(tableX, tableY, 440, rowH, 0, '#ffffff11', '#334');
+  let hx = tableX;
+  for(let h=0;h<headers.length;h++){
+    txt(headers[h], hx+colWidths[h]/2, tableY+20, 'bold 11px Segoe UI', '#7ecfff', 'center');
+    hx += colWidths[h];
+  }
+
+  // Table rows for different examples
+  const tableRows = [
+    {base:64,  models:['n','s','m','x']},
+    {base:512, models:['n','s','m','x']},
+    {base:1024,models:['n','s','m','x']},
+  ];
+
+  let ty = tableY + rowH;
+  for(const tr of tableRows){
+    for(const tm of tr.models){
+      const tsc = SC[tm];
+      const raw = Math.round(tr.base * tsc.w);
+      const actual = Math.min(raw, tsc.mc);
+      const capped = raw > tsc.mc;
+
+      rr(tableX, ty, 440, rowH, 0, capped?'#ff6b6b11':'#ffffff05', '#1a2a3a');
+      let tx = tableX;
+      txt(tr.base+'', tx+colWidths[0]/2, ty+20, '12px Segoe UI', '#e8ecf0', 'center');
+      tx+=colWidths[0];
+      txt('×'+tsc.w+' ('+tm+')', tx+colWidths[1]/2, ty+20, '12px Segoe UI', MC[tm], 'center');
+      tx+=colWidths[1];
+      txt(raw+'', tx+colWidths[2]/2, ty+20, '12px Segoe UI', capped?'#ff6b6b':'#d0dae4', 'center');
+      tx+=colWidths[2];
+      txt(tsc.mc+'', tx+colWidths[3]/2, ty+20, '12px Segoe UI', '#c0ccd8', 'center');
+      tx+=colWidths[3];
+      txt(actual+'', tx+colWidths[4]/2, ty+20, 'bold 13px Segoe UI', capped?C.maxch_c:'#51cf66', 'center');
+      if(capped){
+        txt('截断!', tx+colWidths[4]+5, ty+20, 'bold 10px Segoe UI', C.maxch_c);
+      }
+      ty += rowH;
+    }
+  }
+
+  // Analogy box
+  const aY = s4y + 280;
+  rr(s4x+30, aY, 580, 35, 6, '#ffffff08', '#334');
+  txt('比喻：max_channels = 办公室最大容量，再多员工也坐不下', s4x+320, aY+22, '12px Segoe UI', '#ffa94d', 'center');
+
+  // ---- Bottom summary ----
+  const bY = 730;
+  rr(30, bY, 1300, 100, 10, '#1a1a3a', '#334');
+  txt('总结：Scale 缩放 = 同一张设计图纸，造不同规模的公司', 680, bY+22, 'bold 16px Segoe UI', '#ffa94d', 'center');
+
+  const sumModels = ['n','s','m','l','x'];
+  const sumX = 80;
+  for(let i=0;i<5;i++){
+    const sm = sumModels[i];
+    const sx = sumX + i*260;
+    rr(sx, bY+38, 240, 48, 6, MC[sm]+'15', MC[sm]+'55');
+    txt('YOLO11'+sm, sx+10, bY+58, 'bold 13px Segoe UI', MC[sm]);
+    txt('w='+SC[sm].w+' d='+SC[sm].d+' mc='+SC[sm].mc, sx+10, bY+76, '10px Segoe UI', '#d0dae4');
+    txt('第1层: '+getCh(64,sm)+'核', sx+160, bY+58, 'bold 11px Segoe UI', '#fff');
+    txt('最深: '+getCh(1024,sm)+'核', sx+160, bY+76, '11px Segoe UI', '#dde4ec');
+  }
+}
+
+// ======================== TAB 3: DETAILED ========================
+function drawDetailedView(){
+  const m=currentModel, sc=SC[m];
+  let y = 10;
+
+  txt('YOLO11'+m+' (w='+sc.w+', d='+sc.d+', mc='+sc.mc+')', 15, y+12, 'bold 13px Segoe UI', MC[m]);
+  y += 22;
+
+  const stages = [
+    {lbl:'输入',  size:'640×640×3', blocks:[], ch:3},
+    {lbl:'Stage1', size:'320×320', blocks:[
+      {n:'CBS',col:C.cbs,dt:'3×3, s=2'}], baseCh:64},
+    {lbl:'Stage2', size:'160×160', blocks:[
+      {n:'CBS',col:C.cbs,dt:'3×3, s=2'},
+      {n:'C3k2',col:C.c3k2,br:2,bc:256}], baseCh:128},
+    {lbl:'Stage3', size:'80×80', blocks:[
+      {n:'CBS',col:C.cbs,dt:'3×3, s=2'},
+      {n:'C3k2',col:C.c3k2,br:2,bc:512}], baseCh:256, out:'★P3(s=8)'},
+    {lbl:'Stage4', size:'40×40', blocks:[
+      {n:'CBS',col:C.cbs,dt:'3×3, s=2'},
+      {n:'C3k2',col:C.c3k2,br:2,bc:512},
+      {n:'SPPF',col:C.sppf,dt:'3×Pool5×5'},
+      {n:'C2PSA',col:C.c2psa,br:2,bc:1024}], baseCh:512, out:'★P4(s=16)'},
+    {lbl:'Stage5', size:'20×20', blocks:[
+      {n:'CBS',col:C.cbs,dt:'3×3, s=2'},
+      {n:'C3k2',col:C.c3k2,br:2,bc:1024}], baseCh:1024, out:'★P5(s=32)'},
+  ];
+
+  // Column headers
+  txt('阶段', 15, y+10, 'bold 11px Segoe UI', '#7ecfff');
+  txt('尺寸', 80, y+10, 'bold 11px Segoe UI', '#7ecfff');
+  txt('通道', 140, y+10, 'bold 11px Segoe UI', '#7ecfff');
+  txt('内部结构', 220, y+10, 'bold 11px Segoe UI', '#7ecfff');
+  txt('输出', 1200, y+10, 'bold 11px Segoe UI', '#7ecfff', 'right');
+  y += 20;
+
+  const rowH = 80;
+  for(let i=0;i<stages.length;i++){
+    const s=stages[i];
+    const ch = s.ch!==undefined ? s.ch : getCh(s.baseCh,m);
+    const pr = Math.min(1,Math.max(0,(animFrame-i*8)/20));
+    if(pr<=0){y+=rowH;continue;}
+    ctx.globalAlpha=pr;
+
+    rr(10, y, 1340, rowH-6, 6, i===0?C.input+'0a':'#ffffff05', '#1a2a3a');
+
+    txt(s.lbl, 18, y+20, 'bold 12px Segoe UI', '#fff');
+    txt(s.size, 80, y+20, '11px Segoe UI', C.dim);
+    txt(ch>3?ch+'核':'3ch', 140, y+20, 'bold 13px Segoe UI', ch>3?C.kernel:C.input);
+
+    if(i===0){
+      txt('RGB 图片输入', 220, y+35, 'bold 12px Segoe UI', C.input);
+    }
+
+    let bx = 220;
+    for(let j=0;j<s.blocks.length;j++){
+      const b=s.blocks[j];
+      let dt = b.dt;
+      if(!dt && b.br){
+        dt = getRep(b.br,m)+'×rep, '+getCh(b.bc,m)+'ch';
+      }
+      const bw = b.n==='C2PSA'?110 : b.n==='SPPF'?95 : b.n==='C3k2'?115 : 80;
+      drawBlock(bx, y+8, bw, rowH-22, b.col, b.n, dt);
+      if(j<s.blocks.length-1) arrow(bx+bw+2, y+rowH/2-2, bx+bw+14, y+rowH/2-2, C.arrow, 1.5);
+      bx += bw+18;
+    }
+
+    if(s.out){
+      txt(s.out, 1340, y+35, 'bold 12px Segoe UI', C.output, 'right');
+    }
+
+    if(i>0) arrow(680, y-4, 680, y+2, C.arrow, 1.5);
+    ctx.globalAlpha=1;
+    y += rowH;
+  }
+
+  // Summary
+  const fy = y+10;
+  ctx.globalAlpha=Math.min(1,Math.max(0,(animFrame-55)/20));
+  rr(10,fy,1340,60,8,'#ff6b6b11','#ff6b6b44');
+  txt('YOLO11'+m+' Backbone 层数统计', 680, fy+18, 'bold 13px Segoe UI', '#ff6b6b', 'center');
+  txt('CBS=3层 | C3k2='+getRep(2,m)+'×bottleneck×2层 | C2PSA='+getRep(2,m)+'×block | SPPF≈5层', 680, fy+38, '12px Segoe UI', '#e8ecf0', 'center');
+  const tl = m==='l'?'~350':m==='x'?'~600+':'~238';
+  txt('总计约 '+tl+' 层', 680, fy+55, 'bold 12px Segoe UI', C.c2psa, 'center');
+  ctx.globalAlpha=1;
+}
+
+// ======================== TAB 4: FULL ARCHITECTURE ========================
+function drawFullView(){
+  const m=currentModel;
+  const colW = 420, gap=10;
+
+  txt('YOLO11'+m, 1350, 15, 'bold 12px Segoe UI', MC[m], 'right');
+
   const sections = [
-    { name: 'Backbone（信息采集部）', color: COLORS.bg_backbone, border: COLORS.cbs, x: 10, items: [
-      { name: 'CBS', color: COLORS.cbs, sub: '640→320' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '320' },
-      { name: 'CBS', color: COLORS.cbs, sub: '320→160' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '160' },
-      { name: 'CBS', color: COLORS.cbs, sub: '160→80 ★P3' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '80' },
-      { name: 'CBS', color: COLORS.cbs, sub: '80→40 ★P4' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '40' },
-      { name: 'SPPF', color: COLORS.sppf, sub: '多尺度池化' },
-      { name: 'C2PSA', color: COLORS.c2psa, sub: '注意力' },
-      { name: 'CBS', color: COLORS.cbs, sub: '40→20 ★P5' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '20' },
+    {name:'Backbone（信息采集部）',col:C.cbs,x:5, items:[
+      {n:'CBS',c:C.cbs,s:'640→320, '+getCh(64,m)+'核'},
+      {n:'CBS',c:C.cbs,s:'→160, '+getCh(128,m)+'核'},
+      {n:'C3k2',c:C.c3k2,s:getCh(256,m)+'ch, ×'+getRep(2,m)},
+      {n:'CBS',c:C.cbs,s:'→80, '+getCh(256,m)+'核 ★P3'},
+      {n:'C3k2',c:C.c3k2,s:getCh(512,m)+'ch, ×'+getRep(2,m)},
+      {n:'CBS',c:C.cbs,s:'→40, '+getCh(512,m)+'核 ★P4'},
+      {n:'C3k2',c:C.c3k2,s:getCh(512,m)+'ch, ×'+getRep(2,m)},
+      {n:'SPPF',c:C.sppf,s:getCh(1024,m)+'ch, 池化'},
+      {n:'C2PSA',c:C.c2psa,s:getCh(1024,m)+'ch, 注意力'},
+      {n:'CBS',c:C.cbs,s:'→20, '+getCh(1024,m)+'核 ★P5'},
+      {n:'C3k2',c:C.c3k2,s:getCh(1024,m)+'ch, ×'+getRep(2,m)},
     ]},
-    { name: 'Neck（信息整合部）', color: COLORS.bg_neck, border: COLORS.upsample, x: 400, items: [
-      { name: 'Upsample', color: COLORS.upsample, sub: '20→40' },
-      { name: 'Concat', color: COLORS.concat, sub: '+P4特征' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '融合40×40' },
-      { name: 'Upsample', color: COLORS.upsample, sub: '40→80' },
-      { name: 'Concat', color: COLORS.concat, sub: '+P3特征' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '融合80×80' },
-      { name: 'CBS↓', color: COLORS.cbs, sub: '80→40' },
-      { name: 'Concat', color: COLORS.concat, sub: '+中层特征' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '融合40×40' },
-      { name: 'CBS↓', color: COLORS.cbs, sub: '40→20' },
-      { name: 'Concat', color: COLORS.concat, sub: '+大层特征' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '融合20×20' },
+    {name:'Neck（信息整合部）',col:C.up,x:colW+gap+5, items:[
+      {n:'Upsample',c:C.up,s:'20→40'},
+      {n:'Concat',c:C.concat,s:'+P4特征'},
+      {n:'C3k2',c:C.c3k2,s:'40×40, '+getCh(512,m)+'ch'},
+      {n:'Upsample',c:C.up,s:'40→80'},
+      {n:'Concat',c:C.concat,s:'+P3特征'},
+      {n:'C3k2',c:C.c3k2,s:'80×80, '+getCh(256,m)+'ch'},
+      {n:'CBS↓',c:C.cbs,s:'80→40, '+getCh(256,m)+'核'},
+      {n:'Concat',c:C.concat,s:'+中层特征'},
+      {n:'C3k2',c:C.c3k2,s:'40×40, '+getCh(512,m)+'ch'},
+      {n:'CBS↓',c:C.cbs,s:'40→20, '+getCh(512,m)+'核'},
+      {n:'Concat',c:C.concat,s:'+大层特征'},
+      {n:'C3k2',c:C.c3k2,s:'20×20, '+getCh(1024,m)+'ch'},
     ]},
-    { name: 'Head（决策输出部）', color: COLORS.bg_head, border: COLORS.detect, x: 790, items: [
-      { name: '80×80分支', color: COLORS.detect, sub: '小目标检测' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '特征精炼' },
-      { name: 'Detect', color: COLORS.detect, sub: '80类+DFL' },
-      { name: '40×40分支', color: COLORS.detect, sub: '中目标检测' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '特征精炼' },
-      { name: 'Detect', color: COLORS.detect, sub: '80类+DFL' },
-      { name: '20×20分支', color: COLORS.detect, sub: '大目标检测' },
-      { name: 'C3k2', color: COLORS.c3k2, sub: '特征精炼' },
-      { name: 'Detect', color: COLORS.detect, sub: '80类+DFL' },
-      { name: '─────', color: '#333', sub: '' },
-      { name: 'CPU后处理', color: COLORS.output, sub: 'sigmoid+NMS' },
-      { name: '最终结果', color: COLORS.output, sub: '框+类别+概率' },
+    {name:'Head（决策输出部）',col:C.detect,x:2*(colW+gap)+5, items:[
+      {n:'80×80分支',c:C.detect,s:'小目标'},
+      {n:'Detect',c:C.detect,s:'80类+DFL'},
+      {n:'—',c:'#333',s:''},
+      {n:'40×40分支',c:C.detect,s:'中目标'},
+      {n:'Detect',c:C.detect,s:'80类+DFL'},
+      {n:'—',c:'#333',s:''},
+      {n:'20×20分支',c:C.detect,s:'大目标'},
+      {n:'Detect',c:C.detect,s:'80类+DFL'},
+      {n:'—',c:'#333',s:''},
+      {n:'CPU后处理',c:C.output,s:'sigmoid+NMS'},
+      {n:'—',c:'#333',s:''},
+      {n:'最终结果',c:C.output,s:'框+类别+概率'},
     ]},
   ];
 
-  for (let s = 0; s < sections.length; s++) {
-    const sec = sections[s];
-    const progress = Math.min(1, Math.max(0, (animFrame - s * 15) / 25));
-    if (progress <= 0) continue;
-    ctx.globalAlpha = progress;
+  for(let si=0;si<sections.length;si++){
+    const sec=sections[si];
+    const pr=Math.min(1,Math.max(0,(animFrame-si*12)/25));
+    if(pr<=0)continue;
+    ctx.globalAlpha=pr;
 
-    roundRect(sec.x, startY, colW, 680, 10, sec.color, sec.border + '66');
+    rr(sec.x,5,colW,840,10,'#ffffff03',sec.col+'44');
+    txt(sec.name,sec.x+colW/2,28,'bold 13px Segoe UI',sec.col,'center');
 
-    ctx.fillStyle = sec.border;
-    ctx.font = 'bold 15px Segoe UI';
-    ctx.textAlign = 'center';
-    ctx.fillText(sec.name, sec.x + colW / 2, startY + 25);
+    for(let i=0;i<sec.items.length;i++){
+      const it=sec.items[i];
+      const iy = 40 + i*65;
+      const ip=Math.min(1,Math.max(0,(animFrame-si*12-i*2)/15));
+      if(ip<=0)continue;
+      ctx.globalAlpha=pr*ip;
 
-    for (let i = 0; i < sec.items.length; i++) {
-      const item = sec.items[i];
-      const iy = startY + 40 + i * 52;
-      const itemProgress = Math.min(1, Math.max(0, (animFrame - s * 15 - i * 3) / 15));
-      if (itemProgress <= 0) continue;
-      ctx.globalAlpha = progress * itemProgress;
-
-      if (item.name === '─────') {
-        ctx.beginPath();
-        ctx.setLineDash([4, 4]);
-        ctx.moveTo(sec.x + 20, iy + 15);
-        ctx.lineTo(sec.x + colW - 20, iy + 15);
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+      if(it.n==='—'){
+        ctx.beginPath(); ctx.setLineDash([3,3]);
+        ctx.moveTo(sec.x+15,iy+12); ctx.lineTo(sec.x+colW-15,iy+12);
+        ctx.strokeStyle='#556'; ctx.lineWidth=1; ctx.stroke();
         ctx.setLineDash([]);
         continue;
       }
 
-      const bw = colW - 40;
-      roundRect(sec.x + 20, iy, bw, 42, 6, item.color + '22', item.color + '88');
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 13px Segoe UI';
-      ctx.textAlign = 'left';
-      ctx.fillText(item.name, sec.x + 32, iy + 18);
-      ctx.fillStyle = COLORS.dim;
-      ctx.font = '11px Segoe UI';
-      ctx.fillText(item.sub, sec.x + 32, iy + 34);
+      const bw=colW-24;
+      rr(sec.x+12,iy,bw,52,6,it.c+'22',it.c+'88');
+      txt(it.n,sec.x+24,iy+20,'bold 12px Segoe UI','#fff');
+      txt(it.s,sec.x+24,iy+38,'10px Segoe UI',C.dim);
 
-      if (i > 0 && sec.items[i-1].name !== '─────') {
-        const ax = sec.x + colW / 2;
-        ctx.beginPath();
-        ctx.moveTo(ax, iy - 8);
-        ctx.lineTo(ax, iy - 2);
-        ctx.strokeStyle = COLORS.arrow;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+      if(i>0 && sec.items[i-1].n!=='—'){
+        ctx.beginPath();ctx.moveTo(sec.x+colW/2,iy-9);ctx.lineTo(sec.x+colW/2,iy-2);
+        ctx.strokeStyle=C.arrow;ctx.lineWidth=1;ctx.stroke();
       }
     }
-    ctx.globalAlpha = 1;
-
-    if (s < sections.length - 1) {
-      const ax1 = sec.x + colW + 5;
-      const ax2 = sections[s + 1].x - 5;
-      const ay = startY + 340;
-      drawArrow(ax1, ay, ax2, ay, sec.border);
-    }
+    ctx.globalAlpha=1;
+    if(si<2) arrow(sec.x+colW+2,420,sec.x+colW+gap-2,420,sec.col);
   }
 }
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
-  if (currentView === 'simple') drawSimpleView();
-  else if (currentView === 'detailed') drawDetailedView();
-  else drawFullView();
+// ======================== TAB 5: COMPARE ========================
+function drawCompareView(){
+  const models=['n','s','m','l','x'];
+  const colW=250, gap=8, startX=15;
+
+  txt('YOLO11 五大型号卷积核对比',680,22,'bold 17px Segoe UI','#7ecfff','center');
+  txt('同一设计图纸 × 不同 Scale → 不同规模',680,40,'12px Segoe UI','#c0ccd8','center');
+
+  const layers=[
+    {sp:'640→320',bc:64, l:'Conv #1'},
+    {sp:'320→160',bc:128,l:'Conv #2'},
+    {sp:'160→80', bc:256,l:'Conv #3'},
+    {sp:'80→40',  bc:512,l:'Conv #4'},
+    {sp:'40→20',  bc:1024,l:'Conv #5'},
+  ];
+
+  for(let mi=0;mi<5;mi++){
+    const mid=models[mi], sc=SC[mid];
+    const x = startX + mi*(colW+gap);
+    const pr=Math.min(1,Math.max(0,(animFrame-mi*6)/20));
+    if(pr<=0)continue;
+    ctx.globalAlpha=pr;
+
+    rr(x,55,colW,730,10,MC[mid]+'08',MC[mid]+'44');
+    txt('YOLO11'+mid,x+colW/2,78,'bold 15px Segoe UI',MC[mid],'center');
+    txt(sc.lbl,x+colW/2,94,'11px Segoe UI','#d0dae4','center');
+
+    // Scale params
+    rr(x+10,105,colW-20,55,6,'#ffffff08','#334');
+    txt('width = '+sc.w, x+colW/2,122,'bold 12px Segoe UI',C.width_c,'center');
+    txt('depth = '+sc.d+'   max = '+sc.mc, x+colW/2,140,'11px Segoe UI','#c0ccd8','center');
+
+    // Layer bars
+    const barStart = 175;
+    const barRowH = 90;
+    for(let li=0;li<layers.length;li++){
+      const ly=layers[li];
+      const ch=getCh(ly.bc,mid);
+      const by = barStart + li*barRowH;
+      const maxBarW = colW-40;
+      const barW = Math.max(25, (ch/768)*maxBarW);
+
+      txt(ly.l,x+colW/2,by+5,'10px Segoe UI','#c0ccd8','center');
+      txt(ly.sp,x+colW/2,by+18,'9px Segoe UI','#b0b8c4','center');
+
+      const barX = x+(colW-barW)/2;
+      rr(barX,by+24,barW,36,4,MC[mid]+'44',MC[mid],1.5);
+      txt(ch+'',x+colW/2,by+48,'bold 18px Segoe UI','#fff','center');
+
+      const raw=Math.round(ly.bc*sc.w);
+      const capped = raw > sc.mc;
+      txt(capped?'cap!':ly.bc+'×'+sc.w,x+colW/2,by+68,'9px Segoe UI',capped?'#ff6b6b':'#b0bcc8','center');
+    }
+
+    // C3k2 repeat
+    const repY = barStart + 5*barRowH + 5;
+    rr(x+15,repY,colW-30,55,6,'#ffffff08','#334');
+    txt('C3k2 重复',x+colW/2,repY+18,'bold 11px Segoe UI',C.depth_c,'center');
+    txt(getRep(2,mid)+'×',x+colW/2,repY+40,'bold 22px Segoe UI','#fff','center');
+
+    ctx.globalAlpha=1;
+  }
+
+  // Bottom summary
+  const sy=795;
+  ctx.globalAlpha=Math.min(1,Math.max(0,(animFrame-40)/20));
+  txt('width → 卷积核数   |   depth → 重复次数   |   max_channels → 通道上限',680,sy+5,'bold 12px Segoe UI','#ffa94d','center');
+  txt('同一张图纸，不同scale造不同公司：nano=创业团队 small=小公司 medium=中企 large=大企 xlarge=集团',680,sy+25,'11px Segoe UI','#d0dae4','center');
+  ctx.globalAlpha=1;
 }
 
-function animate() {
+// ======================== MAIN ========================
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(currentView==='simple') drawSimpleView();
+  else if(currentView==='scale') drawScaleView();
+  else if(currentView==='detailed') drawDetailedView();
+  else if(currentView==='full') drawFullView();
+  else drawCompareView();
+}
+
+function animate(){
   animFrame++;
   draw();
-  if (animFrame < 150) {
-    animId = requestAnimationFrame(animate);
-  }
+  if(animFrame<200) animId=requestAnimationFrame(animate);
 }
 
-function updateLegend(view) {
-  const el = document.getElementById('legend');
-  const items = [
-    { color: COLORS.cbs, label: 'CBS (Conv+BN+SiLU)' },
-    { color: COLORS.c3k2, label: 'C3k2 (CSP+小卷积)' },
-    { color: COLORS.sppf, label: 'SPPF (多尺度池化)' },
-    { color: COLORS.c2psa, label: 'C2PSA (注意力)' },
-  ];
-  if (view === 'full') {
-    items.push({ color: COLORS.upsample, label: 'Upsample (上采样)' });
-    items.push({ color: COLORS.concat, label: 'Concat (拼接)' });
-    items.push({ color: COLORS.detect, label: 'Detect (检测头)' });
-  }
-  el.innerHTML = items.map(i => 
-    `<div class="legend-item"><div class="legend-color" style="background:${i.color}"></div>${i.label}</div>`
-  ).join('');
-}
+function switchView(v){
+  currentView=v;
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  const ids={simple:'btnSimple',scale:'btnScale',detailed:'btnDetailed',full:'btnFull',compare:'btnCompare'};
+  document.getElementById(ids[v]).classList.add('active');
 
-function updateInfo(view) {
-  const el = document.getElementById('infoPanel');
-  const infos = {
-    simple: `<h3>简化视图说明</h3>
-      <p>这就是之前给你看的"漏斗图"。看起来只有 5 层，但这是<span class="highlight">极度简化</span>的！</p>
-      <p>每个"卷积层（缩小2倍）"实际上内部包含了 <span class="highlight">CBS + C3k2</span>（甚至还有 SPPF 和 C2PSA），每个 C3k2 里面又有 2~6 个 bottleneck，每个 bottleneck 有 2 层卷积。</p>
-      <p>所以实际层数是：<span class="highlight">YOLO11n ≈ 238 层，YOLO11x ≈ 600+ 层</span></p>`,
-    detailed: `<h3>详细视图说明</h3>
-      <p>这个视图展开了每个阶段内部的<span class="highlight">真实组件</span>：</p>
-      <p>• <span class="highlight">CBS</span>：每次负责缩小分辨率（stride=2），同时增加通道数</p>
-      <p>• <span class="highlight">C3k2</span>：一半数据深度处理，一半走捷径，高效提取特征</p>
-      <p>• <span class="highlight">SPPF</span>：三次 MaxPool 叠加，同时获取大/中/小范围信息</p>
-      <p>• <span class="highlight">C2PSA</span>：注意力机制，让网络聚焦重要区域（YOLOv11 新增！）</p>`,
-    full: `<h3>完整架构说明</h3>
-      <p><span class="highlight">Backbone</span>（左）：从图片中逐步提取特征，像漏斗一样越来越小但信息越来越浓缩</p>
-      <p><span class="highlight">Neck</span>（中）：先上采样（小→大）融合浅层细节，再下采样（大→小）融合深层语义。这叫 <span class="highlight">FPN + PAN</span> 结构</p>
-      <p><span class="highlight">Head</span>（右）：三个分支分别检测小/中/大目标，最后由 CPU 做 sigmoid + NMS 后处理</p>
-      <p>整个过程：<span class="highlight">图片 → Backbone提取特征 → Neck融合多尺度 → Head输出检测结果 → CPU后处理 → 最终框+类别+概率</span></p>`
+  const labels={
+    simple:'漏斗图：空间尺寸缩小 ↓  卷积核（通道）增加 ↑',
+    scale:'Scale 图解：width / depth / channels / max_channels 的含义',
+    detailed:'详细视图：每个阶段内部的真实结构',
+    full:'完整架构：Backbone → Neck → Head',
+    compare:'型号对比：5个型号的卷积核差异'
   };
-  el.innerHTML = infos[view];
+  document.getElementById('viewLabel').textContent=labels[v];
+  document.getElementById('modelBar').style.display=(v==='compare'||v==='scale')?'none':'flex';
+
+  const heights={simple:850,scale:850,detailed:700,full:850,compare:840};
+  canvas.height=heights[v]||850;
+
+  animFrame=0;
+  if(animId)cancelAnimationFrame(animId);
+  animate();
+  updateLegend(v);
+  updateInfo(v);
+}
+
+function selectModel(m){
+  currentModel=m;
+  document.querySelectorAll('.model-bar button').forEach(b=>b.classList.remove('sel'));
+  event.target.classList.add('sel');
+  animFrame=0;
+  if(animId)cancelAnimationFrame(animId);
+  animate();
+  updateInfo(currentView);
+}
+
+function updateLegend(v){
+  const el=document.getElementById('legend');
+  if(v==='compare'){
+    el.innerHTML=['n','s','m','l','x'].map(m=>'<div class="legend-item"><div class="legend-color" style="background:'+MC[m]+'"></div>11'+m+'('+SC[m].lbl+')</div>').join('');
+    return;
+  }
+  if(v==='scale'){
+    el.innerHTML=[
+      {c:C.width_c,l:'Width(宽度=卷积核数)'},{c:C.depth_c,l:'Depth(深度=重复次数)'},
+      {c:'#51cf66',l:'Channels(通道=厚度)'},{c:C.maxch_c,l:'Max_channels(上限)'}
+    ].map(i=>'<div class="legend-item"><div class="legend-color" style="background:'+i.c+'"></div>'+i.l+'</div>').join('');
+    return;
+  }
+  const items=[
+    {c:C.cbs,l:'CBS'},{c:C.c3k2,l:'C3k2'},{c:C.sppf,l:'SPPF'},{c:C.c2psa,l:'C2PSA'},{c:C.kernel,l:'卷积核数'}
+  ];
+  if(v==='full'){items.push({c:C.up,l:'Upsample'},{c:C.concat,l:'Concat'},{c:C.detect,l:'Detect'});}
+  el.innerHTML=items.map(i=>'<div class="legend-item"><div class="legend-color" style="background:'+i.c+'"></div>'+i.l+'</div>').join('');
+}
+
+function updateInfo(v){
+  const el=document.getElementById('infoPanel');
+  const m=currentModel,sc=SC[m];
+  const ch=[64,128,256,512,1024].map(b=>getCh(b,m));
+
+  const infos={
+    simple:'<h3>漏斗图 — YOLO11'+m+'</h3>'+
+      '<p>左列：空间尺寸 <span class="hl">640→20</span>（每次stride=2缩一半）</p>'+
+      '<p>右列：卷积核 <span class="hl">'+ch[0]+'→'+ch[4]+'</span>（width='+sc.w+'）</p>'+
+      '<p>规律：空间小→每个像素需表示更多信息→通道数增加。切换上方型号看不同卷积核数！</p>',
+    scale:'<h3>Scale 图解</h3>'+
+      '<p><span class="hl">Width</span> = 每层卷积核数量的缩放比例（员工数）。width=0.25→只招25%，width=1.50→招150%</p>'+
+      '<p><span class="hl2">Depth</span> = C3k2/C2PSA 内部重复次数（工作轮数）。depth=0.5→1轮，depth=1.0→2轮</p>'+
+      '<p><span class="hl3">Channels</span> = 特征图的"厚度"，每个通道=一种看问题的角度</p>'+
+      '<p><span class="hl">max_channels</span> = 通道数上限，防止计算爆炸（办公室容量限制）</p>',
+    detailed:'<h3>详细视图 — YOLO11'+m+'</h3>'+
+      '<p>通道：'+ch.join('→')+'  |  C3k2重复：'+getRep(2,m)+'×  |  depth='+sc.d+'</p>',
+    full:'<h3>完整架构 — YOLO11'+m+'</h3>'+
+      '<p><span class="hl2">Backbone</span>：提取特征（'+ch[0]+'→'+ch[4]+'通道） → '+
+      '<span class="hl3">Neck</span>：融合多尺度 → '+
+      '<span class="hl">Head</span>：输出检测结果</p>',
+    compare:'<h3>型号对比</h3>'+
+      '<p>5个型号共享<span class="hl">同一张yaml图纸</span>，仅 scale 不同：'+
+      '<span class="hl">width</span>控制卷积核数，<span class="hl2">depth</span>控制重复次数，'+
+      '<span class="hl">max_channels</span>限制上限</p>'+
+      '<p>比喻：<span class="hl3">nano=创业团队 small=小公司 medium=中企 large=大企 xlarge=集团</span></p>'
+  };
+  el.innerHTML=infos[v];
 }
 
 switchView('simple');

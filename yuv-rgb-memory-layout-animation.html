@@ -9,7 +9,7 @@
   --y:#4fc3f7;--y-bg:rgba(79,195,247,.12);
   --u:#66bb6a;--u-bg:rgba(102,187,106,.12);
   --v:#ff8a65;--v-bg:rgba(255,138,101,.12);
-  --r:#ef5350;--g:#66bb6a;--b:#42a5f5;--a:#ab47bc;
+  --r:#ef5350;--g:#66bb6a;--b:#42a5f5;--a:#ab47bc;--x:#78909c;
   --bg:#0d1017;--card:#151921;--border:#232836;
   --text:#dce0e8;--dim:#6c7086;--accent:#7c4dff;
   --spine:#3a2d66;
@@ -78,6 +78,9 @@ h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;backgr
 .page-uv{background:linear-gradient(135deg,#0d1f14,#1a1812);border-color:var(--u);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
 .page-vu{background:linear-gradient(135deg,#1f150d,#121a18);border-color:var(--v);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
 .page-pk{background:linear-gradient(135deg,#15131f,#1c1a28);border-color:var(--accent);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-r{background:linear-gradient(135deg,#1f0d0d,#281414);border-color:var(--r);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-g{background:linear-gradient(135deg,#0d1f0d,#142814);border-color:var(--g);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+.page-b{background:linear-gradient(135deg,#0d0d1f,#141428);border-color:var(--b);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
 
 .page.active-page{box-shadow:4px 6px 28px rgba(124,77,255,.3),0 0 20px rgba(124,77,255,.1) inset}
 .page.lifting{
@@ -108,11 +111,12 @@ h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;backgr
 .page-tab{font-size:11px;font-weight:700;margin-bottom:8px;letter-spacing:.3px}
 .page-tab-y{color:var(--y)}.page-tab-u{color:var(--u)}.page-tab-v{color:var(--v)}
 .page-tab-uv{color:var(--u)}.page-tab-vu{color:var(--v)}.page-tab-pk{color:var(--accent)}
+.page-tab-r{color:var(--r)}.page-tab-g{color:var(--g)}.page-tab-b{color:var(--b)}
 
 .pg{display:grid;gap:3px}
 .pc{width:40px;height:40px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;transition:all .3s}
 .pc-y{background:var(--y);color:#000}.pc-u{background:var(--u);color:#000}.pc-v{background:var(--v);color:#000}
-.pc-r{background:var(--r);color:#fff}.pc-g{background:var(--g);color:#000}.pc-b{background:var(--b);color:#fff}.pc-a{background:var(--a);color:#fff}
+.pc-r{background:var(--r);color:#fff}.pc-g{background:var(--g);color:#000}.pc-b{background:var(--b);color:#fff}.pc-a{background:var(--a);color:#fff}.pc-x{background:var(--x);color:#fff}
 .pc.dim{opacity:.15;transform:scale(.8)}.pc.hl{box-shadow:0 0 10px 2px rgba(255,255,255,.5);transform:scale(1.1);z-index:10}
 
 /* ===== MEMORY BLOCKS ===== */
@@ -128,15 +132,19 @@ h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;backgr
 .mb-uv{background:linear-gradient(90deg,var(--u-bg),var(--v-bg));border:1.5px solid rgba(102,187,106,.3)}
 .mb-vu{background:linear-gradient(90deg,var(--v-bg),var(--u-bg));border:1.5px solid rgba(255,138,101,.3)}
 .mb-pk{background:rgba(124,77,255,.06);border:1.5px solid rgba(124,77,255,.2)}
+.mb-r{background:rgba(239,83,80,.08);border:1.5px solid rgba(239,83,80,.3)}
+.mb-g{background:rgba(102,187,106,.08);border:1.5px solid rgba(102,187,106,.3)}
+.mb-b{background:rgba(66,165,245,.08);border:1.5px solid rgba(66,165,245,.3)}
 .mh{font-size:10px;font-weight:700;margin-bottom:5px;letter-spacing:.3px}
 .mh-y{color:var(--y)}.mh-u{color:var(--u)}.mh-v{color:var(--v)}.mh-uv{color:var(--u)}.mh-vu{color:var(--v)}.mh-pk{color:var(--accent)}
+.mh-r{color:var(--r)}.mh-g{color:var(--g)}.mh-b{color:var(--b)}
 .mg{display:flex;flex-wrap:wrap;gap:3px}
 .mc{width:32px;height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;opacity:0;transform:scale(.6);transition:all .3s cubic-bezier(.34,1.56,.64,1)}
 .mc.sh{opacity:1;transform:scale(1)}
 .mc.pp{animation:pp .35s cubic-bezier(.34,1.56,.64,1)}
 @keyframes pp{0%{transform:scale(1.4);opacity:.5}100%{transform:scale(1);opacity:1}}
 .mc-y{background:var(--y);color:#000}.mc-u{background:var(--u);color:#000}.mc-v{background:var(--v);color:#000}
-.mc-r{background:var(--r);color:#fff}.mc-g{background:var(--g);color:#000}.mc-b{background:var(--b);color:#fff}.mc-a{background:var(--a);color:#fff}
+.mc-r{background:var(--r);color:#fff}.mc-g{background:var(--g);color:#000}.mc-b{background:var(--b);color:#fff}.mc-a{background:var(--a);color:#fff}.mc-x{background:var(--x);color:#fff}
 .m-ar{display:flex;align-items:center;color:var(--dim);font-size:16px;padding:0 2px;align-self:center}
 
 .fly{position:fixed;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;z-index:9999;pointer-events:none;transition:all .4s cubic-bezier(.4,0,.2,1)}
@@ -170,6 +178,15 @@ h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;backgr
 .mti.ok{border-color:var(--u);background:rgba(129,199,132,.12);pointer-events:none}
 .mti.bad{border-color:var(--r);background:rgba(239,83,80,.12);animation:sk .5s}
 @keyframes sk{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+.rgb-grp{text-align:center;font-size:11px;color:var(--dim);margin:6px 0 2px;font-weight:600}
+.rgb-row{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:2px 0}
+
+/* Bayer page */
+.page-bayer{background:linear-gradient(135deg,#1a1520,#201828);border-color:var(--accent);border-left-color:var(--spine);box-shadow:4px 6px 20px rgba(0,0,0,.4)}
+/* Tiled custom */
+.tiled-note{font-size:12px;color:var(--dim);text-align:center;margin:10px 0;line-height:1.8}
+.tiled-note strong{color:var(--text)}
 </style>
 </head>
 <body>
@@ -183,8 +200,12 @@ h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;backgr
   <button class="tb" data-t="t3">NV21</button>
   <button class="tb" data-t="t4">YUYV (Packed)</button>
   <button class="tb" data-t="t5">格式对比</button>
-  <button class="tb" data-t="t6">RGB 系列</button>
+  <button class="tb" data-t="t6">RGB/BGR 系列</button>
   <button class="tb" data-t="t7">记忆闪卡</button>
+  <button class="tb" data-t="t8">YUV400 灰度</button>
+  <button class="tb" data-t="t9">YUV420 10-bit</button>
+  <button class="tb" data-t="t10">YUV420 Tiled</button>
+  <button class="tb" data-t="t11">Bayer RAW</button>
 </nav>
 
 <div class="tc on" id="t0"><div class="sec"><div class="cd">
@@ -240,11 +261,40 @@ h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;backgr
 </div></div></div>
 
 <div class="tc" id="t6"><div class="sec"><div class="cd">
-  <h2>RGB 格式</h2>
-  <p class="ds">RGB 只有 <strong>1 页</strong>，通道交错。对比不同通道顺序。</p>
-  <div class="lg"><div class="li"><div class="ld" style="background:var(--r)"></div>R</div><div class="li"><div class="ld" style="background:var(--g)"></div>G</div><div class="li"><div class="ld" style="background:var(--b)"></div>B</div><div class="li"><div class="ld" style="background:var(--a)"></div>A</div></div>
-  <div id="rgb-b" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:8px 0">
-    <button class="bt on" onclick="swR(this,'rgb24')">RGB24</button><button class="bt" onclick="swR(this,'bgr24')">BGR24</button><button class="bt" onclick="swR(this,'rgba32')">RGBA32</button><button class="bt" onclick="swR(this,'bgra32')">BGRA32</button><button class="bt" onclick="swR(this,'argb32')">ARGB32</button>
+  <h2>RGB / BGR 格式系列</h2>
+  <p class="ds">包含 <strong>8-bit</strong>、<strong>10-bit (2101010)</strong>、<strong>16-bit</strong> 的 Packed 和 Planar 格式。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--r)"></div>R</div><div class="li"><div class="ld" style="background:var(--g)"></div>G</div><div class="li"><div class="ld" style="background:var(--b)"></div>B</div><div class="li"><div class="ld" style="background:var(--a)"></div>A</div><div class="li"><div class="ld" style="background:var(--x)"></div>X (填充)</div></div>
+  <div id="rgb-b">
+    <div class="rgb-grp">8-bit Packed (每通道 8 位)</div>
+    <div class="rgb-row">
+      <button class="bt on" onclick="swR(this,'rgb24')">RGB888</button>
+      <button class="bt" onclick="swR(this,'bgr24')">BGR888</button>
+      <button class="bt" onclick="swR(this,'rgba32')">RGBA8888</button>
+      <button class="bt" onclick="swR(this,'bgra32')">BGRA8888</button>
+      <button class="bt" onclick="swR(this,'argb32')">ARGB8888</button>
+      <button class="bt" onclick="swR(this,'abgr32')">ABGR8888</button>
+      <button class="bt" onclick="swR(this,'bgrx32')">BGRX8888</button>
+      <button class="bt" onclick="swR(this,'rgbx32')">RGBX8888</button>
+      <button class="bt" onclick="swR(this,'xrgb32')">XRGB8888</button>
+      <button class="bt" onclick="swR(this,'xbgr32')">XBGR8888</button>
+    </div>
+    <div class="rgb-grp">10-bit Packed (2101010: A=2bit, RGB各10bit, 共32bit)</div>
+    <div class="rgb-row">
+      <button class="bt" onclick="swR(this,'argb2101010')">ARGB2101010</button>
+      <button class="bt" onclick="swR(this,'abgr2101010')">ABGR2101010</button>
+      <button class="bt" onclick="swR(this,'bgra2101010')">BGRA2101010</button>
+      <button class="bt" onclick="swR(this,'rgba2101010')">RGBA2101010</button>
+    </div>
+    <div class="rgb-grp">16-bit Packed (每通道 16 位)</div>
+    <div class="rgb-row">
+      <button class="bt" onclick="swR(this,'rgb48')">RGB161616</button>
+      <button class="bt" onclick="swR(this,'bgr48')">BGR161616</button>
+    </div>
+    <div class="rgb-grp">Planar (各通道独立平面)</div>
+    <div class="rgb-row">
+      <button class="bt" onclick="swR(this,'rgb888p')">RGB888 Planar</button>
+      <button class="bt" onclick="swR(this,'rgb161616p')">RGB161616 Planar</button>
+    </div>
   </div>
   <div id="s-rgb"></div>
   <div class="st" id="st-rgb"></div>
@@ -257,6 +307,71 @@ h1{text-align:center;padding:24px 16px 4px;font-size:24px;font-weight:700;backgr
   <div class="cd"><h2>连线测验</h2><p class="ds">点左侧格式名 → 点右侧内存描述</p><div class="mtg" id="mtg"></div><div class="ct" style="margin-top:8px"><button class="bt pr" onclick="mtR()">重新开始</button><span id="mts" style="font-size:11px;color:var(--dim);padding:0 8px"></span></div></div>
 </div></div>
 
+<!-- YUV400 灰度 -->
+<div class="tc" id="t8"><div class="sec"><div class="cd">
+  <h2>YUV400 灰度格式</h2>
+  <p class="ds">YUV400 只有 <strong>Y 亮度</strong> 分量，没有 U/V 色度。四种位深/打包方式。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y 亮度</div></div>
+  <div id="y400-b" class="rgb-row" style="margin:8px 0">
+    <button class="bt on" onclick="swY400(this,'y400_8')">YUV400 8-bit</button>
+    <button class="bt" onclick="swY400(this,'y400_p010')">YUV400 P010</button>
+    <button class="bt" onclick="swY400(this,'y400_i010')">YUV400 I010/L010</button>
+    <button class="bt" onclick="swY400(this,'y400_pack10')">YUV400 Pack10</button>
+  </div>
+  <div id="s-y400"></div>
+  <div class="st" id="st-y400"></div>
+  <div class="ct"><button class="bt pr" onclick="play('y400')">播放搬运</button><button class="bt" onclick="rst('y400')">重置</button></div>
+</div></div></div>
+
+<!-- YUV420 10-bit -->
+<div class="tc" id="t9"><div class="sec"><div class="cd">
+  <h2>YUV420 10-bit 格式</h2>
+  <p class="ds">10-bit 采样精度的 4:2:0 格式。<strong>P010</strong>=10bit 存于 16bit 高位，<strong>I010/L010</strong>=10bit 存于 16bit 低位，<strong>Pack10</strong>=3×10bit 紧密打包为 32bit。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y (10-bit)</div><div class="li"><div class="ld" style="background:linear-gradient(90deg,var(--u),var(--v))"></div>UV/VU 交错</div></div>
+  <div id="y420t-b" class="rgb-row" style="margin:8px 0">
+    <button class="bt on" onclick="swY42010(this,'nv12_p010')">NV12 P010</button>
+    <button class="bt" onclick="swY42010(this,'nv12_i010')">NV12 I010/L010</button>
+    <button class="bt" onclick="swY42010(this,'nv12_pack10')">NV12 Pack10</button>
+    <button class="bt" onclick="swY42010(this,'nv21_p010')">NV21 P010</button>
+    <button class="bt" onclick="swY42010(this,'nv21_i010')">NV21 I010/L010</button>
+  </div>
+  <div id="s-y42010"></div>
+  <div class="st" id="st-y42010"></div>
+  <div class="ct"><button class="bt pr" onclick="play('y42010')">翻页播放</button><button class="bt" onclick="rst('y42010')">重置</button></div>
+</div></div></div>
+
+<!-- YUV420 Tiled -->
+<div class="tc" id="t10"><div class="sec"><div class="cd">
+  <h2>YUV420 Tiled-4×4 格式</h2>
+  <p class="ds">像素按 <strong>4×4 瓦片</strong> 分块存储，而非逐行扫描。硬件加速器常用此布局来提高缓存命中率。<br>下方使用 <strong>8×8 图像（= 4 个 4×4 瓦片，2×2 排列）</strong>演示瓦片扫描与逐行扫描的区别。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--y)"></div>Y</div><div class="li"><div class="ld" style="background:linear-gradient(90deg,var(--u),var(--v))"></div>UV/VU</div></div>
+  <div id="ytiled-b" class="rgb-row" style="margin:8px 0">
+    <button class="bt on" onclick="swYTiled(this,'nv12_8t')">NV12 8-bit Tiled</button>
+    <button class="bt" onclick="swYTiled(this,'nv21_8t')">NV21 8-bit Tiled</button>
+    <button class="bt" onclick="swYTiled(this,'nv12_p010t')">NV12 P010 Tiled</button>
+    <button class="bt" onclick="swYTiled(this,'nv21_p010t')">NV21 P010 Tiled</button>
+  </div>
+  <div id="s-ytiled"></div>
+  <div class="st" id="st-ytiled"></div>
+  <div class="ct"><button class="bt pr" onclick="playTiledDemo()">播放瓦片搬运</button><button class="bt" onclick="rstTiledDemo()">重置</button></div>
+</div></div></div>
+
+<!-- Bayer RAW -->
+<div class="tc" id="t11"><div class="sec"><div class="cd">
+  <h2>Bayer RAW — 传感器原始格式</h2>
+  <p class="ds">图像传感器的原始数据。每个像素只捕获 <strong>R/G/B 中的一种颜色</strong>，按 2×2 重复模式排列（拜耳滤镜阵列 CFA）。<br>拍照后需经过 <strong>去马赛克 (Demosaic/Debayer)</strong> 算法插值还原全彩图像。Green 像素占 50%（人眼对绿色最敏感）。</p>
+  <div class="lg"><div class="li"><div class="ld" style="background:var(--r)"></div>R 滤镜</div><div class="li"><div class="ld" style="background:var(--g)"></div>G 滤镜 (×2)</div><div class="li"><div class="ld" style="background:var(--b)"></div>B 滤镜</div></div>
+  <div id="bayer-b" class="rgb-row" style="margin:8px 0">
+    <button class="bt on" onclick="swBayer(this,'rggb')">RGGB</button>
+    <button class="bt" onclick="swBayer(this,'bggr')">BGGR</button>
+    <button class="bt" onclick="swBayer(this,'grbg')">GRBG</button>
+    <button class="bt" onclick="swBayer(this,'gbrg')">GBRG</button>
+  </div>
+  <div id="s-bayer"></div>
+  <div class="st" id="st-bayer"></div>
+  <div class="ct"><button class="bt pr" onclick="play('bayer')">播放搬运</button><button class="bt" onclick="rst('bayer')">重置</button></div>
+</div></div></div>
+
 <script>
 /* Tabs */
 document.querySelectorAll('.tn .tb').forEach(b=>{b.addEventListener('click',()=>{document.querySelectorAll('.tn .tb').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tc').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.getElementById(b.dataset.t).classList.add('on');});});
@@ -264,6 +379,8 @@ document.querySelectorAll('.tn .tb').forEach(b=>{b.addEventListener('click',()=>
 /* Data helpers */
 function yL(w,h){const a=[];for(let r=0;r<h;r++)for(let c=0;c<w;c++)a.push('Y'+(r*w+c));return a;}
 function uvL(ch,w,h){const a=[];for(let r=0;r<h/2;r++)for(let c=0;c<w/2;c++)a.push(ch+(r*(w/2)+c));return a;}
+function mkUV(w,h){const a=[];uvL('U',w,h).forEach((u,i)=>{a.push({t:u,c:'u'});a.push({t:uvL('V',w,h)[i],c:'v'});});return a;}
+function mkVU(w,h){const a=[];uvL('V',w,h).forEach((v,i)=>{a.push({t:v,c:'v'});a.push({t:uvL('U',w,h)[i],c:'u'});});return a;}
 
 /* Format definitions */
 const F={};
@@ -304,13 +421,11 @@ F.yv12={
 F.nv12={
   pages:[
     {tab:'第1页 · Y 平面 (4×4)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
-    {tab:'第2页 · UV 交错平面',tcls:'page-tab-uv',cls:'page-uv',ecol:'var(--u)',cols:4,
-     cells:(()=>{const a=[];uvL('U',4,4).forEach((u,i)=>{a.push({t:u,c:'u'});a.push({t:uvL('V',4,4)[i],c:'v'});});return a;})()},
+    {tab:'第2页 · UV 交错平面',tcls:'page-tab-uv',cls:'page-uv',ecol:'var(--u)',cols:4,cells:mkUV(4,4)},
   ],
   memB:[
     {label:'Y 平面 · 16B',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
-    {label:'UV 交错 · 8B',hc:'mh-uv',bc:'mb-uv',
-     cells:(()=>{const a=[];uvL('U',4,4).forEach((u,i)=>{a.push({t:u,c:'u'});a.push({t:uvL('V',4,4)[i],c:'v'});});return a;})()},
+    {label:'UV 交错 · 8B',hc:'mh-uv',bc:'mb-uv',cells:mkUV(4,4)},
   ],
   steps:[
     {pi:0,bi:0,txt:'📖 第1页 — 搬运 Y 平面',peel:true},
@@ -320,13 +435,11 @@ F.nv12={
 F.nv21={
   pages:[
     {tab:'第1页 · Y 平面 (4×4)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
-    {tab:'第2页 · VU 交错平面（V在U前！）',tcls:'page-tab-vu',cls:'page-vu',ecol:'var(--v)',cols:4,
-     cells:(()=>{const a=[];uvL('V',4,4).forEach((v,i)=>{a.push({t:v,c:'v'});a.push({t:uvL('U',4,4)[i],c:'u'});});return a;})()},
+    {tab:'第2页 · VU 交错平面（V在U前！）',tcls:'page-tab-vu',cls:'page-vu',ecol:'var(--v)',cols:4,cells:mkVU(4,4)},
   ],
   memB:[
     {label:'Y 平面 · 16B',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
-    {label:'VU 交错 · 8B',hc:'mh-vu',bc:'mb-vu',
-     cells:(()=>{const a=[];uvL('V',4,4).forEach((v,i)=>{a.push({t:v,c:'v'});a.push({t:uvL('U',4,4)[i],c:'u'});});return a;})()},
+    {label:'VU 交错 · 8B',hc:'mh-vu',bc:'mb-vu',cells:mkVU(4,4)},
   ],
   steps:[
     {pi:0,bi:0,txt:'📖 第1页 — 搬运 Y 平面',peel:true},
@@ -352,7 +465,6 @@ function build(fid){
   const root=document.getElementById('s-'+fid);if(!root)return;
   root.innerHTML='';SS[fid]={T:[],on:false};
 
-  /* Book */
   const bw=document.createElement('div');bw.className='book-wrap';
   const bk=document.createElement('div');bk.className='book';
   const sp=document.createElement('div');sp.className='spine';
@@ -418,12 +530,10 @@ function build(fid){
 
   bk.appendChild(sp);bk.appendChild(pb);bw.appendChild(bk);root.appendChild(bw);
 
-  /* Arrow */
   const arr=document.createElement('div');arr.className='arr-d';
   arr.innerHTML='<span class="ai">⬇</span> 逐页搬运到连续内存';
   root.appendChild(arr);
 
-  /* Memory blocks */
   const ml=document.createElement('div');ml.className='ma-l';ml.textContent='内存（低地址→高地址）：';
   root.appendChild(ml);
   const mbs=document.createElement('div');mbs.className='mbs';
@@ -444,8 +554,8 @@ function build(fid){
 ['yuv420p','yv12','nv12','nv21','yuyv'].forEach(build);
 
 /* Flying pixel */
-const bgM={y:'var(--y)',u:'var(--u)',v:'var(--v)',r:'var(--r)',g:'var(--g)',b:'var(--b)',a:'var(--a)'};
-const fgM={y:'#000',u:'#000',v:'#000',r:'#fff',g:'#000',b:'#fff',a:'#fff'};
+const bgM={y:'var(--y)',u:'var(--u)',v:'var(--v)',r:'var(--r)',g:'var(--g)',b:'var(--b)',a:'var(--a)',x:'#78909c'};
+const fgM={y:'#000',u:'#000',v:'#000',r:'#fff',g:'#000',b:'#fff',a:'#fff',x:'#fff'};
 function flyPx(src,dst,c,lbl,dur,cb){
   const sr=src.getBoundingClientRect(),dr=dst.getBoundingClientRect();
   const el=document.createElement('div');el.className='fly';el.textContent=lbl;
@@ -562,24 +672,286 @@ buildCmp();
 function playCmp(){document.querySelectorAll('[id^="cmc-"]').forEach((c,i)=>setTimeout(()=>c.classList.add('sh','pp'),i*35));}
 function rstCmp(){document.querySelectorAll('[id^="cmc-"]').forEach(c=>c.classList.remove('sh','pp'));}
 
-/* RGB */
-const RF={rgb24:{ch:['r','g','b'],d:'RGB24: R→G→B 每像素3B'},bgr24:{ch:['b','g','r'],d:'BGR24: B→G→R (OpenCV默认)'},rgba32:{ch:['r','g','b','a'],d:'RGBA32: R→G→B→A 带透明'},bgra32:{ch:['b','g','r','a'],d:'BGRA32: B→G→R→A (Windows)'},argb32:{ch:['a','r','g','b'],d:'ARGB32: A→R→G→B (macOS)'}};
-const CN={r:'R',g:'G',b:'B',a:'A'};
+/* ========== RGB / BGR ========== */
+const CN={r:'R',g:'G',b:'B',a:'A',x:'X'};
+const RF={
+  rgb24:       {ch:['r','g','b'],     d:'RGB888: R→G→B 每像素3B'},
+  bgr24:       {ch:['b','g','r'],     d:'BGR888: B→G→R 每像素3B (OpenCV默认)'},
+  rgba32:      {ch:['r','g','b','a'], d:'RGBA8888: R→G→B→A 每像素4B'},
+  bgra32:      {ch:['b','g','r','a'], d:'BGRA8888: B→G→R→A 每像素4B (Windows)'},
+  argb32:      {ch:['a','r','g','b'], d:'ARGB8888: A→R→G→B 每像素4B (macOS)'},
+  abgr32:      {ch:['a','b','g','r'], d:'ABGR8888: A→B→G→R 每像素4B'},
+  bgrx32:      {ch:['b','g','r','x'], d:'BGRX8888: B→G→R→X 每像素4B (X=填充)'},
+  rgbx32:      {ch:['r','g','b','x'], d:'RGBX8888: R→G→B→X 每像素4B (X=填充)'},
+  xrgb32:      {ch:['x','r','g','b'], d:'XRGB8888: X→R→G→B 每像素4B (X=填充)'},
+  xbgr32:      {ch:['x','b','g','r'], d:'XBGR8888: X→B→G→R 每像素4B (X=填充)'},
+  argb2101010: {ch:['a','r','g','b'], d:'ARGB2101010: A(2b)R(10b)G(10b)B(10b) 每像素4B'},
+  abgr2101010: {ch:['a','b','g','r'], d:'ABGR2101010: A(2b)B(10b)G(10b)R(10b) 每像素4B'},
+  bgra2101010: {ch:['b','g','r','a'], d:'BGRA2101010: B(10b)G(10b)R(10b)A(2b) 每像素4B'},
+  rgba2101010: {ch:['r','g','b','a'], d:'RGBA2101010: R(10b)G(10b)B(10b)A(2b) 每像素4B'},
+  rgb48:       {ch:['r','g','b'],     d:'RGB161616: R(16b)→G(16b)→B(16b) 每像素6B'},
+  bgr48:       {ch:['b','g','r'],     d:'BGR161616: B(16b)→G(16b)→R(16b) 每像素6B'},
+  rgb888p:     {ch:['r','g','b'],     d:'RGB888 Planar: R/G/B 三平面 (8-bit)', planar:true},
+  rgb161616p:  {ch:['r','g','b'],     d:'RGB161616 Planar: R/G/B 三平面 (16-bit)', planar:true, bits:'16-bit'},
+};
+
 let curR='rgb24';
 function buildR(){
   const rf=RF[curR],np=4;
-  F.rgb={
-    pages:[{tab:rf.d,tcls:'page-tab-pk',cls:'page-pk',ecol:'var(--accent)',
-      cols:rf.ch.length*np,cells:(()=>{const a=[];for(let p=0;p<np;p++)rf.ch.forEach(c=>a.push({t:CN[c]+p,c}));return a;})()}],
-    memB:[(()=>{const cells=[];for(let p=0;p<np;p++)rf.ch.forEach(c=>cells.push({t:CN[c]+p,c}));return{label:rf.d,hc:'mh-pk',bc:'mb-pk',cells};})()],
-    steps:[{pi:0,bi:0,txt:rf.d,peel:false}],
-  };
+  if(rf.planar){
+    const pClsM={r:'page-r',g:'page-g',b:'page-b'};
+    const tClsM={r:'page-tab-r',g:'page-tab-g',b:'page-tab-b'};
+    const eColM={r:'var(--r)',g:'var(--g)',b:'var(--b)'};
+    const mhM={r:'mh-r',g:'mh-g',b:'mh-b'};
+    const mbM={r:'mb-r',g:'mb-g',b:'mb-b'};
+    const pgs=[],mbs=[],sts=[];
+    rf.ch.forEach((ch,ci)=>{
+      const cells=[];for(let i=0;i<np;i++)cells.push({t:CN[ch]+i,c:ch});
+      const pn=ci+1;
+      const suffix=rf.bits?' ('+rf.bits+')':'';
+      pgs.push({tab:'第'+pn+'页 · '+CN[ch]+' 平面'+suffix,tcls:tClsM[ch],cls:pClsM[ch],ecol:eColM[ch],cols:2,cells});
+      mbs.push({label:CN[ch]+' 平面'+suffix,hc:mhM[ch],bc:mbM[ch],cells});
+      sts.push({pi:ci,bi:ci,txt:'📖 第'+pn+'页 — 搬运 '+CN[ch]+' 平面',peel:ci<rf.ch.length-1});
+    });
+    F.rgb={pages:pgs,memB:mbs,steps:sts};
+  } else {
+    F.rgb={
+      pages:[{tab:rf.d,tcls:'page-tab-pk',cls:'page-pk',ecol:'var(--accent)',
+        cols:rf.ch.length*np,cells:(()=>{const a=[];for(let p=0;p<np;p++)rf.ch.forEach(c=>a.push({t:CN[c]+p,c}));return a;})()}],
+      memB:[(()=>{const cells=[];for(let p=0;p<np;p++)rf.ch.forEach(c=>cells.push({t:CN[c]+p,c}));return{label:rf.d,hc:'mh-pk',bc:'mb-pk',cells};})()],
+      steps:[{pi:0,bi:0,txt:rf.d,peel:false}],
+    };
+  }
   build('rgb');
 }
 buildR();
 function swR(btn,id){document.querySelectorAll('#rgb-b .bt').forEach(b=>b.classList.remove('on'));btn.classList.add('on');curR=id;buildR();}
 
-/* Flashcards */
+/* ========== YUV400 灰度 ========== */
+const Y400F={
+  y400_8:{
+    pages:[{tab:'Y 平面 (4×4) — 8-bit',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    memB:[{label:'Y 平面 · 16B (8-bit)',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    steps:[{pi:0,bi:0,txt:'纯灰度 8-bit — 搬运 Y 平面',peel:false}]
+  },
+  y400_p010:{
+    pages:[{tab:'Y 平面 (4×4) — P010 (10-bit MSB in 16-bit)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    memB:[{label:'Y 平面 · 32B (P010: 10-bit 高位对齐 in 16-bit)',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    steps:[{pi:0,bi:0,txt:'灰度 P010 — 每 Y 占 16-bit (高 10 位有效)',peel:false}]
+  },
+  y400_i010:{
+    pages:[{tab:'Y 平面 (4×4) — I010/L010 (10-bit LSB in 16-bit)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    memB:[{label:'Y 平面 · 32B (I010: 10-bit 低位对齐 in 16-bit)',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    steps:[{pi:0,bi:0,txt:'灰度 I010/L010 — 每 Y 占 16-bit (低 10 位有效)',peel:false}]
+  },
+  y400_pack10:{
+    pages:[{tab:'Y 平面 (4×4) — Pack10 (3×10-bit in 32-bit)',tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    memB:[{label:'Y 平面 · ~22B (Pack10: 3 样本打包 32-bit)',hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))}],
+    steps:[{pi:0,bi:0,txt:'灰度 Pack10 — 每 3 个 Y 紧密打包到 32-bit',peel:false}]
+  },
+};
+let curY400='y400_8';
+function buildY400(){F.y400=Y400F[curY400];build('y400');}
+buildY400();
+function swY400(btn,id){document.querySelectorAll('#y400-b .bt').forEach(b=>b.classList.remove('on'));btn.classList.add('on');curY400=id;buildY400();}
+
+/* ========== YUV420 10-bit ========== */
+function mkNV12Fmt(yDesc,uvDesc,yMemLabel,uvMemLabel,stepY,stepUV){
+  return{
+    pages:[
+      {tab:'第1页 · Y 平面 (4×4) — '+yDesc,tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
+      {tab:'第2页 · UV 交错 — '+uvDesc,tcls:'page-tab-uv',cls:'page-uv',ecol:'var(--u)',cols:4,cells:mkUV(4,4)},
+    ],
+    memB:[
+      {label:yMemLabel,hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
+      {label:uvMemLabel,hc:'mh-uv',bc:'mb-uv',cells:mkUV(4,4)},
+    ],
+    steps:[
+      {pi:0,bi:0,txt:'📖 第1页 — '+stepY,peel:true},
+      {pi:1,bi:1,txt:'📖 第2页 — '+stepUV,peel:false},
+    ],
+  };
+}
+function mkNV21Fmt(yDesc,vuDesc,yMemLabel,vuMemLabel,stepY,stepVU){
+  return{
+    pages:[
+      {tab:'第1页 · Y 平面 (4×4) — '+yDesc,tcls:'page-tab-y',cls:'page-y',ecol:'var(--y)',cols:4,cells:yL(4,4).map(t=>({t,c:'y'}))},
+      {tab:'第2页 · VU 交错 — '+vuDesc,tcls:'page-tab-vu',cls:'page-vu',ecol:'var(--v)',cols:4,cells:mkVU(4,4)},
+    ],
+    memB:[
+      {label:yMemLabel,hc:'mh-y',bc:'mb-y',cells:yL(4,4).map(t=>({t,c:'y'}))},
+      {label:vuMemLabel,hc:'mh-vu',bc:'mb-vu',cells:mkVU(4,4)},
+    ],
+    steps:[
+      {pi:0,bi:0,txt:'📖 第1页 — '+stepY,peel:true},
+      {pi:1,bi:1,txt:'📖 第2页 — '+stepVU,peel:false},
+    ],
+  };
+}
+
+const Y420_10F={
+  nv12_p010: mkNV12Fmt('P010','P010','Y 平面 · 32B (P010: 10-bit 高位)','UV 交错 · 16B (P010)','Y 平面 (P010: 10-bit MSB in 16-bit)','UV 交错 (P010)'),
+  nv12_i010: mkNV12Fmt('I010/L010','I010/L010','Y 平面 · 32B (I010: 10-bit 低位)','UV 交错 · 16B (I010)','Y 平面 (I010: 10-bit LSB in 16-bit)','UV 交错 (I010/L010)'),
+  nv12_pack10: mkNV12Fmt('Pack10','Pack10','Y 平面 (Pack10: 3×10-bit/32-bit)','UV 交错 (Pack10)','Y 平面 (Pack10: 紧密打包)','UV 交错 (Pack10)'),
+  nv21_p010: mkNV21Fmt('P010','P010','Y 平面 · 32B (P010: 10-bit 高位)','VU 交错 · 16B (P010)','Y 平面 (P010: 10-bit MSB in 16-bit)','VU 交错 (P010)'),
+  nv21_i010: mkNV21Fmt('I010/L010','I010/L010','Y 平面 · 32B (I010: 10-bit 低位)','VU 交错 · 16B (I010)','Y 平面 (I010: 10-bit LSB in 16-bit)','VU 交错 (I010/L010)'),
+};
+let curY42010='nv12_p010';
+function buildY42010(){F.y42010=Y420_10F[curY42010];build('y42010');}
+buildY42010();
+function swY42010(btn,id){document.querySelectorAll('#y420t-b .bt').forEach(b=>b.classList.remove('on'));btn.classList.add('on');curY42010=id;buildY42010();}
+
+/* ========== YUV420 Tiled-4×4 (8×8 = 4 tiles custom visualization) ========== */
+let curYTiled='nv12_8t';
+let tdTimers=[],tdPlaying=false;
+function buildTiledCustom(){
+  const root=document.getElementById('s-ytiled');root.innerHTML='';
+  const isNV21=curYTiled.includes('nv21'),isP010=curYTiled.includes('p010');
+  const bitSfx=isP010?' (P010·10bit→16bit)':' (8-bit)';
+  const W=8,H=8,TW=4,TH=4,tilesX=W/TW,tilesY=H/TH;
+  const yLb=(r,c)=>'Y'+(r*W+c);
+  const tBdr=['rgba(79,195,247,.4)','rgba(102,187,106,.4)','rgba(255,138,101,.4)','rgba(171,71,188,.4)'];
+  const tBg=['rgba(79,195,247,.06)','rgba(102,187,106,.06)','rgba(255,138,101,.06)','rgba(171,71,188,.06)'];
+  const tName=['T0 (左上)','T1 (右上)','T2 (左下)','T3 (右下)'];
+
+  /* ---- Image grid: 2×2 tiles, each 4×4 ---- */
+  const imgSec=document.createElement('div');imgSec.style.cssText='text-align:center;margin-bottom:8px';
+  const imgTtl=document.createElement('div');imgTtl.className='ma-l';imgTtl.style.textAlign='center';
+  imgTtl.textContent='8×8 Y 平面'+bitSfx+' — 4 个 4×4 瓦片 (2×2 排列)';
+  imgSec.appendChild(imgTtl);
+  const imgOuter=document.createElement('div');
+  imgOuter.style.cssText='display:inline-grid;grid-template-columns:1fr 1fr;gap:8px';
+  for(let ty=0;ty<tilesY;ty++)for(let tx=0;tx<tilesX;tx++){
+    const ti=ty*tilesX+tx;
+    const td=document.createElement('div');td.id='td-tile-'+ti;
+    td.style.cssText='border:2px dashed '+tBdr[ti]+';border-radius:8px;padding:8px 6px 6px;background:'+tBg[ti]+';transition:box-shadow .3s';
+    const lbl=document.createElement('div');
+    lbl.style.cssText='font-size:10px;font-weight:700;color:var(--accent);text-align:center;margin-bottom:4px;letter-spacing:1px';
+    lbl.textContent=tName[ti];td.appendChild(lbl);
+    const g=document.createElement('div');g.className='pg';g.style.gridTemplateColumns='repeat(4,30px)';
+    for(let tr=0;tr<TH;tr++)for(let tc=0;tc<TW;tc++){
+      const r=ty*TH+tr,c=tx*TW+tc,ci=tr*TW+tc;
+      const d=document.createElement('div');d.className='pc pc-y';
+      d.style.cssText='width:30px;height:30px;font-size:8px';
+      d.textContent=yLb(r,c);d.id='td-img-'+ti+'-'+ci;g.appendChild(d);
+    }
+    td.appendChild(g);imgOuter.appendChild(td);
+  }
+  imgSec.appendChild(imgOuter);root.appendChild(imgSec);
+
+  /* ---- Arrow ---- */
+  const arr=document.createElement('div');arr.className='arr-d';
+  arr.innerHTML='<span class="ai">⬇</span> 按瓦片顺序搬运到连续内存';root.appendChild(arr);
+
+  /* ---- Raster vs Tiled comparison note ---- */
+  const note=document.createElement('div');note.className='tiled-note';
+  note.innerHTML='<strong>逐行扫描:</strong> Y0→Y1→…→Y7, Y8→…→Y15, … (按行从左到右、从上到下)<br>'+
+    '<strong>瓦片扫描:</strong> 先读完 T0 全部 16 像素 → T1 → T2 → T3（按瓦片逐块，块内仍然逐行）';
+  root.appendChild(note);
+
+  /* ---- Memory: 4 tile blocks ---- */
+  const ml=document.createElement('div');ml.className='ma-l';
+  ml.textContent='Y 平面内存'+bitSfx+'（瓦片顺序 · 低地址→高地址）：';root.appendChild(ml);
+  const mbs=document.createElement('div');mbs.className='mbs';mbs.style.cssText='flex-wrap:wrap;justify-content:center';
+  for(let ti=0;ti<4;ti++){
+    if(ti>0){const a=document.createElement('div');a.className='m-ar';a.textContent='→';mbs.appendChild(a);}
+    const tyi=Math.floor(ti/tilesX),txi=ti%tilesX;
+    const blk=document.createElement('div');
+    blk.style.cssText='border:2px dashed '+tBdr[ti]+';border-radius:8px;padding:6px;background:'+tBg[ti];
+    const hd=document.createElement('div');
+    hd.style.cssText='font-size:10px;font-weight:700;color:var(--accent);text-align:center;margin-bottom:4px';
+    hd.textContent='瓦片 '+tName[ti];blk.appendChild(hd);
+    const g=document.createElement('div');g.className='mg';
+    g.style.cssText='display:grid;grid-template-columns:repeat(4,24px);gap:2px';
+    for(let tr=0;tr<TH;tr++)for(let tc=0;tc<TW;tc++){
+      const r=tyi*TH+tr,c=txi*TW+tc,ci=tr*TW+tc;
+      const d=document.createElement('div');d.className='mc mc-y';
+      d.style.cssText='width:24px;height:24px;font-size:7px';
+      d.textContent=yLb(r,c);d.id='td-mem-'+ti+'-'+ci;g.appendChild(d);
+    }
+    blk.appendChild(g);mbs.appendChild(blk);
+  }
+  root.appendChild(mbs);
+
+  /* ---- UV note ---- */
+  const uvOrd=isNV21?'VU':'UV';
+  const uvNote=document.createElement('div');uvNote.className='tiled-note';uvNote.style.marginTop='14px';
+  uvNote.innerHTML='<strong>'+uvOrd+' 色度平面'+bitSfx+'</strong> 同理：半分辨率 4×4 → 4 个 <strong>2×2 瓦片</strong>，'+
+    (isNV21?'每瓦片内 V₀U₀V₁U₁…':'每瓦片内 U₀V₀U₁V₁…');
+  root.appendChild(uvNote);
+
+  /* ---- Why tiled ---- */
+  const why=document.createElement('div');why.className='tiled-note';
+  why.style.cssText='margin-top:8px;border:1px dashed var(--border);border-radius:8px;padding:10px;text-align:left';
+  why.innerHTML='💡 <strong>为什么用瓦片？</strong> 逐行扫描时，Y0 与正下方的 Y8 在内存中相距 8 字节（一整行宽度）。'+
+    '但在 4×4 瓦片中，同一块区域的 16 个像素<strong>紧密排列</strong>在连续的 16 字节内，'+
+    '视频解码器 / 显示控制器读取一个区域时只需一次缓存加载，<strong>缓存命中率大幅提升</strong>。';
+  root.appendChild(why);
+}
+
+function playTiledDemo(){
+  if(tdPlaying)return;tdPlaying=true;rstTiledDemo(true);
+  const spd=55,flyD=260;let delay=200;
+  const stEl=document.getElementById('st-ytiled');
+  const tName=['T0 (左上)','T1 (右上)','T2 (左下)','T3 (右下)'];
+  for(let ti=0;ti<4;ti++){
+    const td0=delay;
+    tdTimers.push(setTimeout(()=>{
+      stEl.textContent='📦 搬运瓦片 '+tName[ti]+' — 16 个 Y 像素…';
+      const el=document.getElementById('td-tile-'+ti);if(el)el.style.boxShadow='0 0 16px rgba(124,77,255,.5)';
+    },td0));
+    for(let ci=0;ci<16;ci++){
+      const d=delay;
+      tdTimers.push(setTimeout(()=>{
+        const s=document.getElementById('td-img-'+ti+'-'+ci),dst=document.getElementById('td-mem-'+ti+'-'+ci);
+        if(s&&dst){s.classList.add('hl');
+          flyPx(s,dst,'y',s.textContent,flyD,()=>{dst.classList.add('sh','pp');});
+          setTimeout(()=>{s.classList.remove('hl');s.classList.add('dim');},flyD);}
+      },d));delay+=spd;
+    }
+    delay+=250;const td1=delay;
+    tdTimers.push(setTimeout(()=>{const el=document.getElementById('td-tile-'+ti);if(el)el.style.boxShadow='';},td1));
+    delay+=100;
+  }
+  tdTimers.push(setTimeout(()=>{stEl.textContent='✅ 4 个瓦片全部搬运完成！块内像素保持 4×4 空间局部性';tdPlaying=false;},delay));
+}
+
+function rstTiledDemo(keep){
+  if(!keep){tdTimers.forEach(clearTimeout);tdTimers=[];tdPlaying=false;}
+  document.querySelectorAll('[id^="td-mem-"]').forEach(e=>e.classList.remove('sh','pp'));
+  document.querySelectorAll('[id^="td-img-"]').forEach(e=>e.classList.remove('dim','hl'));
+  for(let i=0;i<4;i++){const el=document.getElementById('td-tile-'+i);if(el)el.style.boxShadow='';}
+  document.querySelectorAll('.fly').forEach(e=>e.remove());
+  if(!keep){const st=document.getElementById('st-ytiled');if(st)st.textContent='';}
+}
+
+buildTiledCustom();
+function swYTiled(btn,id){document.querySelectorAll('#ytiled-b .bt').forEach(b=>b.classList.remove('on'));btn.classList.add('on');curYTiled=id;rstTiledDemo();buildTiledCustom();}
+
+/* ========== Bayer RAW ========== */
+const BAYER_PAT={
+  rggb:[['r','g','r','g'],['g','b','g','b'],['r','g','r','g'],['g','b','g','b']],
+  bggr:[['b','g','b','g'],['g','r','g','r'],['b','g','b','g'],['g','r','g','r']],
+  grbg:[['g','r','g','r'],['b','g','b','g'],['g','r','g','r'],['b','g','b','g']],
+  gbrg:[['g','b','g','b'],['r','g','r','g'],['g','b','g','b'],['r','g','r','g']],
+};
+const BLbl={r:'R',g:'G',b:'B'};
+function mkBayerFmt(pid){
+  const p=BAYER_PAT[pid],cells=[];
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){const ch=p[r][c];cells.push({t:BLbl[ch]+(r*4+c),c:ch});}
+  const desc='2×2 基本单元: '+pid.toUpperCase().split('').join('→');
+  return{
+    pages:[{tab:pid.toUpperCase()+' Bayer 滤镜阵列 (4×4 传感器)',tcls:'page-tab-pk',cls:'page-bayer',ecol:'var(--accent)',cols:4,cells}],
+    memB:[{label:'RAW 单通道 · 16B (逐行读出, 颜色=滤镜位置)',hc:'mh-pk',bc:'mb-pk',cells}],
+    steps:[{pi:0,bi:0,txt:'传感器逐像素读出 — '+desc+' — 每像素仅捕获一种颜色',peel:false}],
+  };
+}
+let curBayer='rggb';
+function buildBayer(){F.bayer=mkBayerFmt(curBayer);build('bayer');}
+buildBayer();
+function swBayer(btn,id){document.querySelectorAll('#bayer-b .bt').forEach(b=>b.classList.remove('on'));btn.classList.add('on');curBayer=id;buildBayer();}
+
+/* ========== Flashcards ========== */
 const fcD=[
   {q:'YUV420P',h:'翻转看答案',a:'别名 <strong>I420</strong><br><strong>Planar</strong> · 三页书<br>Y→U→V',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'|',c:'s'},{t:'U',c:'u'},{t:'|',c:'s'},{t:'V',c:'v'}]},
   {q:'YV12',h:'和I420的区别',a:'<strong>Planar</strong> · 三页<br><strong>V 在 U 前面！</strong><br>Y→V→U',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'|',c:'s'},{t:'V',c:'v'},{t:'|',c:'s'},{t:'U',c:'u'}]},
@@ -587,8 +959,20 @@ const fcD=[
   {q:'NV21',h:'和NV12差一字',a:'<strong>Semi-Planar</strong> · 两页<br><strong>V在U前</strong> · VUVU',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'|',c:'s'},{t:'V',c:'v'},{t:'U',c:'u'},{t:'V',c:'v'},{t:'U',c:'u'}]},
   {q:'YUYV',h:'也叫 YUY2',a:'<strong>Packed</strong> · 一页<br>4:2:2 · YUYV循环',m:[{t:'Y',c:'y'},{t:'U',c:'u'},{t:'Y',c:'y'},{t:'V',c:'v'}]},
   {q:'12 vs 21',h:'数字暗示顺序',a:'NV<strong>12</strong>=U先V后<br>NV<strong>21</strong>=V先U后',m:[]},
-  {q:'BGR24',h:'OpenCV注意',a:'B→G→R 反过来<br>OpenCV 默认格式',m:[{t:'B',c:'b'},{t:'G',c:'g'},{t:'R',c:'r'}]},
+  {q:'BGR888',h:'OpenCV注意',a:'B→G→R 反过来<br>OpenCV 默认格式',m:[{t:'B',c:'b'},{t:'G',c:'g'},{t:'R',c:'r'}]},
   {q:'三种排列',h:'核心区分',a:'<strong>P</strong>lanar：三页书<br><strong>S</strong>emi-P：两页书<br><strong>P</strong>acked：一页纸',m:[]},
+  {q:'ABGR8888',h:'和ARGB对比',a:'A→<strong>B→G→R</strong><br>B/R 对调',m:[{t:'A',c:'a'},{t:'B',c:'b'},{t:'G',c:'g'},{t:'R',c:'r'}]},
+  {q:'XRGB8888',h:'X=填充字节',a:'<strong>X</strong>→R→G→B<br>X 占位不透明<br>4B/像素',m:[{t:'X',c:'x'},{t:'R',c:'r'},{t:'G',c:'g'},{t:'B',c:'b'}]},
+  {q:'2101010',h:'HDR 常见格式',a:'A=<strong>2</strong>bit RGB各<strong>10</strong>bit<br>共 32bit/像素<br>10-bit 色深',m:[{t:'A²',c:'a'},{t:'R¹⁰',c:'r'},{t:'G¹⁰',c:'g'},{t:'B¹⁰',c:'b'}]},
+  {q:'RGB161616',h:'高精度色彩',a:'每通道 <strong>16-bit</strong><br>共 48-bit/像素<br>6 字节',m:[{t:'R16',c:'r'},{t:'G16',c:'g'},{t:'B16',c:'b'}]},
+  {q:'YUV400',h:'纯灰度',a:'只有 <strong>Y</strong> 分量<br>无 U/V 色度<br>单通道灰度图',m:[{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'Y',c:'y'},{t:'Y',c:'y'}]},
+  {q:'P010',h:'10-bit 高位',a:'10-bit 存于 <strong>16-bit 高位</strong><br>低 6 位补零<br>MSB 对齐',m:[]},
+  {q:'I010/L010',h:'10-bit 低位',a:'10-bit 存于 <strong>16-bit 低位</strong><br>高 6 位补零<br>LSB 对齐',m:[]},
+  {q:'Pack10',h:'紧密打包',a:'3×10-bit → <strong>32-bit</strong><br>2-bit 填充<br>节省空间',m:[]},
+  {q:'Tiled-4×4',h:'瓦片存储',a:'像素按 <strong>4×4 块</strong>存储<br>非逐行扫描<br>利于缓存命中',m:[]},
+  {q:'RGB Planar',h:'通道分离',a:'R/G/B 各占<strong>独立平面</strong><br>像三页书<br>类似 YUV Planar',m:[{t:'R',c:'r'},{t:'R',c:'r'},{t:'|',c:'s'},{t:'G',c:'g'},{t:'G',c:'g'},{t:'|',c:'s'},{t:'B',c:'b'},{t:'B',c:'b'}]},
+  {q:'Bayer RAW',h:'传感器原始数据',a:'每像素仅<strong>一个颜色</strong><br>2×2 重复排列 (CFA)<br>需 Demosaic 还原全彩',m:[{t:'R',c:'r'},{t:'G',c:'g'},{t:'G',c:'g'},{t:'B',c:'b'}]},
+  {q:'RGGB',h:'最常见Bayer排列',a:'<strong>R</strong>G / G<strong>B</strong><br>Canon/Sony 常用<br>G 占 50% (人眼敏感)',m:[{t:'R',c:'r'},{t:'G',c:'g'},{t:'G',c:'g'},{t:'B',c:'b'}]},
 ];
 let fcPg=0;const fcN=4;
 function fcR(){
@@ -596,7 +980,7 @@ function fcR(){
   const s=fcPg*fcN,e=Math.min(s+fcN,fcD.length);
   for(let i=s;i<e;i++){
     const d=fcD[i],c=document.createElement('div');c.className='fc';c.onclick=()=>c.classList.toggle('fl');
-    let mh='';if(d.m.length)mh='<div class="fm">'+d.m.map(x=>x.c==='s'?'<div class="fb" style="background:none;color:var(--dim)">|</div>':`<div class="fb" style="background:var(--${x.c});color:${x.c==='r'||x.c==='b'||x.c==='a'?'#fff':'#000'}">${x.t}</div>`).join('')+'</div>';
+    let mh='';if(d.m.length)mh='<div class="fm">'+d.m.map(x=>x.c==='s'?'<div class="fb" style="background:none;color:var(--dim)">|</div>':`<div class="fb" style="background:var(--${x.c});color:${x.c==='r'||x.c==='b'||x.c==='a'||x.c==='x'?'#fff':'#000'}">${x.t}</div>`).join('')+'</div>';
     c.innerHTML=`<div class="ff f1"><div class="fq">${d.q}</div><div class="fh">${d.h}</div></div><div class="ff f2"><div class="fa">${d.a}</div>${mh}</div>`;
     g.appendChild(c);
   }
@@ -605,7 +989,6 @@ function fcR(){
 function fcN2(){if((fcPg+1)*fcN<fcD.length){fcPg++;fcR();}}
 function fcP(){if(fcPg>0){fcPg--;fcR();}}
 function fcS(){for(let i=fcD.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[fcD[i],fcD[j]]=[fcD[j],fcD[i]];}fcPg=0;fcR();}
-/* fix naming collision */
 window.fcN=fcN2;
 fcR();
 
@@ -618,13 +1001,30 @@ const mL=[
   {t:'420=2×2共享 / 422=水平共享',c:'color:var(--accent)',s:'420省一半 / 422省三分之一'},
   {t:'BGR = RGB 倒序 → OpenCV默认',c:'color:var(--v)',s:'注意通道顺序！'},
   {t:'三兄弟：I420 / NV12 / NV21',c:'color:var(--y)',s:'记住这三个够用'},
+  {t:'X = 填充字节（BGRX/RGBX/XRGB/XBGR）',c:'color:var(--x)',s:'占位不存数据'},
+  {t:'2101010 = A(2)+RGB(10×3) = 32-bit HDR',c:'color:var(--r)',s:'HDR/广色域常用'},
+  {t:'P010/I010 用 16-bit 装 10-bit',c:'color:var(--y)',s:'P=高位 I=低位'},
+  {t:'Tiled-4×4 = 像素按瓦片排列',c:'color:var(--u)',s:'硬件加速常用布局'},
+  {t:'Bayer RAW = 传感器马赛克 → 每像素只有一色',c:'color:var(--r)',s:'RGGB/BGGR/GRBG/GBRG 四种排列'},
 ];
 let mT=[];
 function mnP(){mnR();const d=document.getElementById('mn');d.innerHTML='';mL.forEach((l,i)=>{const e=document.createElement('div');e.className='mnl';e.style.cssText=l.c;e.innerHTML=`${l.t}<br><span style="font-size:11px;color:var(--dim);font-weight:400">${l.s}</span>`;d.appendChild(e);mT.push(setTimeout(()=>e.classList.add('sh','hl'),i*600));mT.push(setTimeout(()=>e.classList.remove('hl'),i*600+400));});}
 function mnR(){mT.forEach(clearTimeout);mT=[];document.getElementById('mn').innerHTML='';}
 
 /* Match */
-const mP=[{l:'YUV420P',r:'Y…|U…|V…(三块)'},{l:'NV12',r:'Y…|UVUV…(两块)'},{l:'NV21',r:'Y…|VUVU…(两块)'},{l:'YUYV',r:'YUYV YUYV…(一块)'},{l:'YV12',r:'Y…|V…|U…(V在U前)'},{l:'RGB24',r:'RGBRGB…(三字节)'}];
+const mP=[
+  {l:'YUV420P',r:'Y…|U…|V…(三块)'},
+  {l:'NV12',r:'Y…|UVUV…(两块)'},
+  {l:'NV21',r:'Y…|VUVU…(两块)'},
+  {l:'YUYV',r:'YUYV YUYV…(一块)'},
+  {l:'YV12',r:'Y…|V…|U…(V在U前)'},
+  {l:'RGB888',r:'RGBRGB…(三字节)'},
+  {l:'ABGR8888',r:'ABGR…(四字节,BGR序)'},
+  {l:'XRGB8888',r:'XRGB…(X=填充)'},
+  {l:'YUV400',r:'YYYY…(纯灰度)'},
+  {l:'ARGB2101010',r:'A(2b)R(10b)G(10b)B(10b)'},
+  {l:'Bayer RAW',r:'RG/GB单通道(需Demosaic)'},
+];
 let mS;
 function mtBuild(){
   const g=document.getElementById('mtg');g.innerHTML='';mS={sel:null,sc:0,tot:mP.length,done:new Set()};
